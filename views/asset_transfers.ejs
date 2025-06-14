@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transfer Asset</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/css/bar.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
+
+  <!-- Bootstrap 5.3 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body>
+  <div class="main-container d-flex">
+
+       <!-- Sidebar -->
+      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+        <!-- ส่วนเนื้อหาใน Sidebar -->
+        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+          <h1 class="fs-5 text-uppercase">
+            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+            <span class="text-white">Management</span>
+          </h1>
+        </div>
+        <ul class="list-unstyled px-2">
+          <li class="mb-2">
+          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
+          </li>
+          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
+          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
+          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
+            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
+        </ul>
+        <div class="mt-auto px-2 pb-3 text-center">
+          <div class="text-white mb-2">
+            User : <%= user_name %>
+          </div>
+          <div class="text-white mb-2">
+            Role : <%= role %>
+          </div>
+          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
+            <i class="fas fa-sign-out-alt me-2"></i> Logout
+          </a>
+        </div>
+      </div>
+  
+        <!-- //หน้าจอหลัก// -->
+    <div class="content flex-fill">
+      <!-- ส่วนบน (ถ้าต้องการ Navbar หรือ Title) -->
+      <nav class="navbar navbar-light bg-light px-3">
+        <div class="container-fluid">
+          <h2 class="navbar-brand fs-5">Transfer Asset</h2>
+        </div>
+      </nav>
+
+      <div class="container mt-4">
+        <h3>โอนทรัพย์สินสำหรับใบงาน: <%= req_asset_id %>
+        </h3>
+        <p>รายการที่ขอ</p>
+        <% items.forEach(item=> { %>
+        <h5>
+          <%= item.item_name %> (x <%= item.item_quantity %>)
+        </h5>
+        <% }) %>
+
+        <div id="itemsContainer">
+            <!-- วนลูปแต่ละรายการ (item_name, item_quantity) -->
+            
+          </div>
+
+        <!-- ฟอร์มโอนทรัพย์สิน -->
+        <form id="transferForm">
+          <!-- ซ่อน req_asset_id ไว้ใน hidden input -->
+          <input type="hidden" id="req_asset_id" value="<%= req_asset_id %>">
+
+          <!-- 🔄 Input สำหรับสแกน QR หรือพิมพ์ AS -->
+          <div class="mb-3">
+            <label for="scanInput" class="form-label">สแกน / กรอกหมายเลขทรัพย์สิน:</label>
+            <input type="text" id="scanInput" data-expected="<% items.forEach(item=> { %><%= item.item_quantity %><% }) %>" class="form-control" placeholder="พิมพ์หรือยิง QR แล้ว Enter" autofocus>
+          </div>
+
+          <!-- ✅ รายการที่เพิ่มเข้ามา -->
+          <p class="text-primary" id="scanCount">สแกนแล้ว: 0</p>
+          <ul id="scannedList" class="list-group mb-3 "></ul>
+
+          <div class="mb-3">
+            <label for="reason" class="form-label">เหตุผลการโอน:</label>
+            <textarea id="reason" class="form-control"></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary">ยืนยันการโอน</button>
+        </form>
+      </div>
+    </div>
+    <!-- End Main Content -->
+
+  </div>
+  <!-- End main-container -->
+
+  <script>
+
+  const scannedAS = [];
+  const scanInput = document.getElementById('scanInput');
+  const listContainer = document.getElementById('scannedList');
+  const scanCountText = document.getElementById('scanCount');
+
+  // ตั้งจำนวนที่ควรสแกน (หากมีตัวแปรจำนวนที่ต้องการได้จาก server)
+  const totalRequired = parseInt(document.getElementById('scanInput').getAttribute('data-expected')) || 0;
+
+  // ฟังก์ชันอัปเดตจำนวน
+  function updateScanCount() {
+    scanCountText.textContent = `สแกนแล้ว: ${scannedAS.length}`;
+  }
+
+  // ฟังก์ชันเพิ่มรายการ
+  function addScannedAsset(data, assetNumber) {
+    const li = document.createElement('li');
+    li.className = 'list-group-item';
+
+    li.innerHTML = `
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <strong>${assetNumber}</strong><br>
+          <small>ชื่อ: ${data.as_name || '-'}</small><br>
+          <small>หมวดหมู่: ${data.as_category || '-'}</small><br>
+          <small>Serial: ${data.as_serial_number || '-'}</small>
+        </div>
+        <button class="btn btn-sm btn-danger">ลบ</button>
+      </div>
+    `;
+
+    // ปุ่มลบ
+    const delBtn = li.querySelector('button');
+    delBtn.onclick = () => {
+      scannedAS.splice(scannedAS.indexOf(assetNumber), 1);
+      listContainer.removeChild(li);
+      updateScanCount();
+    };
+
+    listContainer.appendChild(li);
+    updateScanCount();
+  }
+
+  // Event: เมื่อกด Enter บน input
+  scanInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const value = this.value.trim();
+
+      if (!value) return;
+
+      // ตรวจ AS ซ้ำ
+      if (scannedAS.includes(value)) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'ซ้ำ!',
+          text: `หมายเลขทรัพย์สิน ${value} ถูกเพิ่มแล้ว`,
+        });
+        this.value = '';
+        return;
+      }
+
+      // ดึงข้อมูลทรัพย์สินจาก API
+      fetch(`/assets/api/assets/${value}`)
+        .then(res => {
+          if (!res.ok) throw new Error(`ไม่พบหมายเลขทรัพย์สิน ${value}`);
+          return res.json();
+        })
+        .then(data => {
+          scannedAS.push(value);
+          addScannedAsset(data, value);
+          scanInput.value = '';
+        })
+        .catch(err => {
+          Swal.fire({
+            icon: 'error',
+            title: 'ไม่สำเร็จ',
+            text: err.message
+          });
+          scanInput.value = '';
+        });
+    }
+  });
+
+
+
+
+
+
+    document.getElementById('transferForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      const req_asset_id = document.getElementById('req_asset_id').value.trim();
+      const reason = document.getElementById('reason').value.trim();
+
+      if (scannedAS.length === 0) {
+        return Swal.fire({
+          icon: 'warning',
+          title: 'ไม่มีรายการ',
+          text: 'กรุณาสแกนหมายเลขทรัพย์สินอย่างน้อย 1 รายการ',
+        });
+      }
+
+      // payload แบบ items = { "item_id": [AS1, AS2] }
+      const items = { manual: scannedAS }; // ใส่ key item_id ปลอมชื่อว่า manual ก็พอ
+
+      fetch('/api/asset_transfers/multiple', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ req_asset_id, reason, items })
+      })
+        .then(async res => {
+          const data = await res.json();
+          if (!res.ok) {
+            return Swal.fire({
+              icon: 'error',
+              title: 'ไม่สำเร็จ',
+              text: data.error || 'เกิดข้อผิดพลาด',
+            });
+          }
+          Swal.fire({
+            icon: 'success',
+            title: 'สำเร็จ',
+            text: data.message,
+          }).then(() => window.location.reload());
+        })
+        .catch(err => {
+          console.error(err);
+          Swal.fire({
+            icon: 'error',
+            title: 'ผิดพลาด',
+            text: err.message || 'ไม่สามารถส่งข้อมูลได้',
+          });
+        });
+    });
+
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

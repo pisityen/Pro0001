@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transfer Asset</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/css/bar.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
+
+  <!-- Bootstrap 5.3 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+</head>
+
+<body>
+  <div class="main-container d-flex">
+
+          <!-- Sidebar -->
+      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+        <!-- ส่วนเนื้อหาใน Sidebar -->
+        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+          <h1 class="fs-5 text-uppercase">
+            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+            <span class="text-white">Management</span>
+          </h1>
+        </div>
+        <ul class="list-unstyled px-2">
+          <li class="mb-2">
+          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
+          </li>
+          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
+          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
+          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
+            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
+        </ul>
+        <div class="mt-auto px-2 pb-3 text-center">
+          <div class="text-white mb-2">
+            User : <%= user_name %>
+          </div>
+          <div class="text-white mb-2">
+            Role : <%= role %>
+          </div>
+          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
+            <i class="fas fa-sign-out-alt me-2"></i> Logout
+          </a>
+        </div>
+      </div>
+  
+        <!-- //หน้าจอหลัก// -->
+    <div class="content flex-fill">
+      <!-- ส่วนบน (ถ้าต้องการ Navbar หรือ Title) -->
+      <h3>สร้างใบโอนคืนทรัพย์สิน</h3>
+      <form id="returnForm">
+        <input type="hidden" id="user_id" value="<%= user_id %>">
+        <div class="mb-3">
+          <label for="reason" class="form-label">เหตุผลการคืน:</label>
+          <textarea class="form-control" id="reason" required></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label for="as_numbers" class="form-label">ทรัพย์สินที่ต้องการคืน (เลือกได้หลายรายการ):</label>
+          <% if (assets && assets.length > 0) { %>
+            <% assets.forEach(asset => { %>
+              <div class="form-check">
+                <input class="form-check-input as-checkbox" type="checkbox" value="<%= asset.as_asset_number %>" id="<%= asset.as_asset_number %>">
+                <label class="form-check-label" for="<%= asset.as_asset_number %>">
+                  <%= asset.as_asset_number %> - <%= asset.as_name %> (Serial: <%= asset.as_serial_number %>)
+                </label>
+              </div>
+            <% }) %>
+          <% } else { %>
+            <p class="text-danger">ไม่พบทรัพย์สินที่สามารถคืนได้</p>
+          <% } %>
+        </div>
+
+        <button type="submit" class="btn btn-primary">ยืนยันการคืน</button>
+      </form>
+      </div>
+    </div>
+    <!-- End Main Content -->
+
+  </div>
+  <!-- End main-container -->
+
+  <script>
+    document.getElementById("returnForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+  
+      const user_id = document.getElementById('user_id').value;
+      const reason = document.getElementById('reason').value.trim();
+      const selectedASArray = Array.from(document.querySelectorAll('.as-checkbox:checked'));
+      const asNumbers = selectedASArray.map(input => input.value.trim());
+
+
+  
+      if (asNumbers.length === 0) {
+        alert("กรุณาเลือกทรัพย์สินอย่างน้อย 1 รายการ");
+        return;
+      }
+  
+      try {
+        const res = await fetch('/api/asset_transfers/returns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id,
+            reason,
+            transfer_type: 'return',
+            as_asset_numbers: asNumbers
+          })
+        });
+
+        const data = await res.json();  // ✅ ย้ายมาหลังจากตรวจสอบ res.ok
+
+        if (!res.ok) throw new Error(data.error || "Error");
+
+        Swal.fire({
+          icon: 'success',
+          title: 'สำเร็จ',
+          text: data.message
+        }).then(() => {
+          window.location.href = "/all_transfers";
+        });
+
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'ไม่สำเร็จ',
+          text: err.message || 'เกิดข้อผิดพลาดในการคืนทรัพย์สิน'
+        });
+      }console.log({
+        as_asset_numbers: asNumbers,
+        reason
+      });
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

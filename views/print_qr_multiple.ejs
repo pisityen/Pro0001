@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Print Multiple QR</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 10px;
+    }
+    .sticker {
+      width: 300px;
+      height: auto;
+      border: 1px solid #000;
+      padding: 10px;
+      margin: 10px;
+      display: inline-block;
+      vertical-align: top;
+    }
+    .qr {
+      float: left;
+      width: 100px;
+      height: 100px;
+    }
+    .info {
+      float: left;
+      width: 180px;
+      font-size: 14px;
+      padding-left: 10px;
+      margin-top: 10px;
+    }
+    .qr_in {
+        display: block;
+        margin-block-start: 3px;
+        margin-block-end: 0px;
+        margin-inline-start: 0px;
+        margin-inline-end: 0px;
+        unicode-bidi: isolate;
+    }
+    @media print {
+      .sticker {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body onload="window.print()">
+
+  <% assets.forEach(asset => { %>
+    <div class="sticker">
+      <div class="qr">
+        <img src="<%= asset.qrDataURL %>" width="100">
+      </div>
+      <div class="info">
+        <p class="qr_in"><strong>Name:</strong> <%= asset.as_name %></p>
+        <p class="qr_in"><strong>Asset:</strong> <%= asset.as_asset_number %></p>
+        <p class="qr_in"><strong>SN:</strong> <%= asset.as_serial_number || '-' %></p>
+        <p class="qr_in"><strong>Date:</strong> <%= new Date(asset.created_at).toLocaleDateString('th-TH') %></p>
+      </div>
+      <div style="clear:both"></div>
+    </div>
+  <% }) %>
+
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ฟอร์มคำขอทรัพย์สิน</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- ใส่ไว้ใน <head> หรือท้าย <body> ก็ได้ -->
+  <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+</head>
+
+<body>
+  <div class="">
+    <div class="main-container d-flex">
+      <!-- Sidebar -->
+      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+        <!-- ส่วนเนื้อหาใน Sidebar -->
+        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+          <h1 class="fs-5 text-uppercase">
+            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+            <span class="text-white">Management</span>
+          </h1>
+        </div>
+        <ul class="list-unstyled px-2">
+          <li class="mb-2">
+          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
+          </li>
+          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
+          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
+          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
+            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
+        </ul>
+        <div class="mt-auto px-2 pb-3 text-center">
+          <div class="text-white mb-2">
+            User : <%= user_name %>
+          </div>
+          <div class="text-white mb-2">
+            Role : <%= role %>
+          </div>
+          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
+            <i class="fas fa-sign-out-alt me-2"></i> Logout
+          </a>
+        </div>
+      </div>
+  
+        <!-- //หน้าจอหลัก// -->
+      <div class="container mt-4">
+        <h2>ฟอร์มคำขอทรัพย์สิน</h2>
+        <form id="assetRequestForm">
+          <div class="mb-3">
+            <label for="userName" class="form-label">รหัสผู้เบิก:</label>
+            <input type="text" id="userID" class="form-control" value="<%= user_id %>" readonly>
+          </div>
+          <div class="mb-3">
+            <label for="userName" class="form-label">ชื่อผู้เบิก:</label>
+            <input type="text" id="userName" class="form-control" value="<%= user_name %>" readonly>
+          </div>
+          <div class="mb-3">
+            <label for="reason" class="form-label">เหตุผล:</label>
+            <textarea id="reason" class="form-control" rows="3" required></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">รายการทรัพย์สิน:</label>
+            <div id="itemsContainer">
+              <div class="d-flex mb-2 align-items-center">
+                <!-- <input type="text" class="form-control me-2" placeholder="ชื่อรายการ" required> -->
+                <select class="form-control me-2" required >
+                  <option value="">เลือกประเภท Asset</option>
+                  <option value="Notebook">Notebook</option>
+                  <option value="Pc">PC</option>
+                  <option value="Printer">Printer</option>
+                  <option value="Smartphone">Smartphone</option>
+                </select>
+                <input type="number" class="form-control me-2" placeholder="จำนวน" min="1" required>
+                <button type="button" class="btn btn-danger btn-sm remove-item" onclick="removeItem(this)">ลบ</button>
+              </div>
+            </div>
+            <button type="button" id="addItem" class="btn btn-secondary btn-sm">เพิ่มรายการ</button>
+          </div>
+          <button type="submit" class="btn btn-primary">ส่งคำขอ</button>
+          <a href="/asset_requests" class="btn btn-secondary">Back to All Requests</a>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ฟังก์ชันลบแถวรายการ โดยลบได้เฉพาะเมื่อมีมากกว่า 1 แถว
+    function removeItem(btn) {
+      const container = document.getElementById("itemsContainer");
+      if (container.querySelectorAll(".d-flex").length > 1) {
+        btn.parentElement.remove();
+      } else {
+        Swal.fire({
+              icon: 'warning',               // ไอคอน เช่น 'success', 'error', 'warning'
+              title: 'ไม่สำเร็จ!',
+              text: 'ต้องมีอย่างน้อย 1 รายการ',
+              confirmButtonText: 'ตกลง'
+            });
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      const addItemBtn = document.getElementById("addItem");
+      const itemsContainer = document.getElementById("itemsContainer");
+
+      // เพิ่มแถวรายการใหม่
+      addItemBtn.addEventListener("click", function () {
+        const itemRow = document.createElement("div");
+        itemRow.classList.add("d-flex", "mb-2", "align-items-center");
+        itemRow.innerHTML = `
+          <select class="form-control me-2" required >
+                  <option value="">เลือกประเภท Asset</option>
+                  <option value="Notebook">Notebook</option>
+                  <option value="Pc">PC</option>
+                  <option value="Printer">Printer</option>
+                  <option value="Smartphone">Smartphone</option>
+                </select>
+          <input type="number" class="form-control me-2" placeholder="จำนวน" min="1" required>
+          <button type="button" class="btn btn-danger btn-sm remove-item" onclick="removeItem(this)">ลบ</button>
+        `;
+        itemsContainer.appendChild(itemRow);
+      });
+
+      // เมื่อฟอร์มถูกส่ง
+      document.getElementById("assetRequestForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        // ดึงค่าจากฟอร์ม
+        const userID = document.getElementById("userID").value.trim();
+        const userName = document.getElementById("userName").value.trim();
+        const reason = document.getElementById("reason").value.trim();
+        const itemRows = itemsContainer.querySelectorAll(".d-flex");
+        const items = Array.from(itemRows).map(row => ({
+          item_name: row.children[0].value.trim(),
+          item_quantity: parseInt(row.children[1].value, 10)
+        }));
+
+        // ตรวจสอบข้อมูลให้ครบถ้วน
+        if (!userID || !userName || !reason || items.length === 0 || items.some(item => !item.item_name || isNaN(item.item_quantity) || item.item_quantity <= 0)) {
+          alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+          return;
+        }
+
+        // ตรวจสอบข้อมูลใน console (สำหรับ debug)
+        console.log({
+          user_id: userID,
+          user_name: userName,
+          reason: reason,
+          request_items: items
+        });
+
+        // ส่งข้อมูลไปยัง API โดยใช้ key ให้ตรงกับที่ API คาดหวัง
+        fetch("/api/asset_requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userID,
+            user_name: userName,
+            reason: reason,
+            request_items: items
+          })
+        })
+          .then(response => {
+            if (!response.ok) {
+              return response.json().then(errData => {
+                throw new Error(errData.error || "เกิดข้อผิดพลาดในการส่งคำขอ");
+              });
+            }
+            return response.json();
+          })
+          .then(data => {
+            Swal.fire({
+              icon: 'success',               // ไอคอน เช่น 'success', 'error', 'warning'
+              title: 'สำเร็จ!',
+              text: 'ส่งคำขอเรียบร้อยแล้ว',
+              confirmButtonText: 'ตกลง'
+            });
+            document.getElementById("assetRequestForm").reset();
+            // รีเซ็ตรายการให้เหลือแถวเริ่มต้นเดียว
+            itemsContainer.innerHTML = `
+            <div class="d-flex mb-2 align-items-center">
+              <select class="form-control me-2" required >
+                  <option value="">เลือกประเภท Asset</option>
+                  <option value="Notebook">Notebook</option>
+                  <option value="Pc">PC</option>
+                  <option value="Printer">Printer</option>
+                  <option value="Smartphone">Smartphone</option>
+                </select>
+                <input type="number" class="form-control me-2" placeholder="จำนวน" min="1" required>
+                <button type="button" class="btn btn-danger btn-sm remove-item" onclick="removeItem(this)">ลบ</button>
+            </div>
+          `;
+          })
+          .catch(err => {
+            console.error(err);
+            alert("เกิดข้อผิดพลาด: " + err.message);
+          });
+      });
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

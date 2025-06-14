@@ -1,0 +1,100 @@
+body{
+    background: #eee;
+    color: #333;
+   }
+   
+
+.sidebar ul li a.active {
+  background-color: #007bff; /* สีพื้นหลังน้ำเงิน */
+  color: #fff; /* ตัวอักษรสีขาว */
+  font-weight: bold;
+  border-radius: 8px;
+}
+/* .sidebar ul li a:hover {
+  background-color: #9ba2a8; 
+  color: #fff;
+  border-radius: 8px;
+} */
+
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh; /* ให้เต็มความสูงของ Viewport */
+  width: 250px; /* หรือกำหนดตามต้องการ */
+  background-color: #343a40; /* สีพื้นหลัง */
+  overflow-y: auto; /* กรณีเนื้อหายาวเกิน Sidebar */
+  width: 250px; /* กำหนดขนาด Sidebar */
+  flex-shrink: 0;
+  font-size: 20px;
+}
+
+.collapse {
+  transition: height 0.3s ease; /* เพิ่มแอนิเมชันขยาย/ยุบ */
+}
+
+/* CSS สำหรับ Layout */
+.main-container {
+  margin-left: 16.66%; /* ประมาณ 2/12 หรือ 1/6 ของ Bootstrap Grid */
+  display: flex;
+  height: 100vh; /* ให้หน้าเว็บเต็มจอ */
+}
+
+
+
+.content {
+  flex-grow: 1; /* ให้ Main Content ใช้พื้นที่ที่เหลือ */
+  overflow-y: auto; /* เลื่อนเนื้อหาได้ถ้าเกิน */
+  padding: 20px; /* เพิ่มระยะ Padding ด้านใน */
+}
+
+
+.navbar {
+  background-color: #007bff; /* สีน้ำเงิน */
+  color: #fff;
+}
+
+.navbar .nav-link {
+  color: #fff;
+}
+
+   
+#side_nav{
+    background: #000;
+    min-width: 250px;
+    max-width: 250px;
+    transition: all 0.3s;
+   }
+   .content{
+      min-height: 100vh;
+      width: 100%;
+   }
+   hr.h-color{
+     background: #eee;
+   }
+   
+   .sidebar li.active{
+      background: #eee;
+      border-radius: 8px;
+   }
+   
+   .sidebar li.active a, .sidebar li.active a:hover {
+    color: #000;
+   }
+   .sidebar li a{
+    color: #fff;
+   }
+   
+   @media(max-width: 767px){
+    #side_nav{
+      margin-left: -250px;
+      position: absolute;
+      min-height: 100vh;
+      z-index: 1;
+   
+    }
+    #side_nav.active{
+      margin-left: 0;
+     }
+   }
