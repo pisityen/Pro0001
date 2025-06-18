@@ -6,6 +6,47 @@ const dbconnection = require('./database');
 const { body, validationResult } = require('express-validator');
 const QRCode = require('qrcode');
 
+// --- Helper Function: ฟังก์ชันสำหรับอัปเดตสถานะใบเบิกหลัก ---
+const updateRequestStatus = async (req_asset_id, approver_id, dbconnection) => {
+  try {
+    const [allItems] = await dbconnection.execute(
+      "SELECT item_status FROM asset_request_items WHERE req_asset_id = ?",
+      [req_asset_id]
+    );
+
+    let newRequestStatus = 'Approved'; 
+
+    const hasPending = allItems.some(item => item.item_status === 'Pending');
+    const hasPartial = allItems.some(item => item.item_status === 'Partially Approved');
+    const hasRejected = allItems.some(item => item.item_status === 'Rejected');
+    const allRejected = allItems.every(item => item.item_status === 'Rejected');
+
+    if (hasPending) {
+      console.log(`Request ${req_asset_id} still has pending items.`);
+      return; 
+    } else if (allRejected) {
+      newRequestStatus = 'Rejected';
+    } else if (hasPartial || hasRejected) {
+      newRequestStatus = 'Partially Approved';
+    }
+    
+    const [updateResult] = await dbconnection.execute(
+      `UPDATE asset_requests 
+       SET req_status = ?, req_approver_id = ?, req_approval_date = NOW() 
+       WHERE req_asset_id = ?`,
+      [newRequestStatus, approver_id || null, req_asset_id] 
+    );
+
+    console.log(`Request status for ${req_asset_id} updated to ${newRequestStatus}.`);
+    return updateResult;
+
+  } catch (error) {
+    console.error('Error in updateRequestStatus function:', error);
+    throw error;
+  }
+};
+
+
 
 const app = express();
 const port = 5000;
@@ -195,7 +236,6 @@ app.use('/assets', assetRoutes); // เส้นทางเริ่มต้�
 const userRoutes = require('./routes/userRoutes'); // เส้นทางไฟล์ asset API
 app.use('/', userRoutes); 
 const transferRoutes = require('./routes/transferRoutes'); // สมมติแยก
-const { Admin } = require('mongodb');
 app.use('/', transferRoutes); 
 
 
@@ -415,37 +455,16 @@ app.get('/asset_requests', ifNotLoggedIn, (req, res) => {
 
 
 
-// Route สำหรับอนุมัติ/ปฏิเสธใบงาน
-app.post('/api/asset_requests/:req_id/approve', isAdmin, async (req, res) => {
-  try {
-    const { req_id } = req.params;
-    const { action, admin_comment } = req.body; 
-    // action อาจเป็น 'Approved' หรือ 'Rejected'
-
-    if (!['Approved', 'Rejected'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid action' });
-    }
-
-    await dbconnection.execute(
-      `UPDATE asset_requests
-       SET req_status = ?, req_admin_comment = ?
-       WHERE req_id = ?`,
-      [action, admin_comment || null, req_id]
-    );
-
-    return res.json({ message: `Request ${action} successfully.` });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Database error' });
-  }
-});
 
 
+
+
+
+
+// GET /asset_requests/:req_asset_id/items
 app.get('/asset_requests/:req_asset_id/items', async (req, res) => {
   try {
     const req_asset_id = req.params.req_asset_id;
-
-    // 1) ดึงข้อมูลใบงาน (asset_requests) เฉพาะ req_asset_id นี้
     const [reqRows] = await dbconnection.execute(
       "SELECT * FROM asset_requests WHERE req_asset_id = ?",
       [req_asset_id]
@@ -453,20 +472,17 @@ app.get('/asset_requests/:req_asset_id/items', async (req, res) => {
     if (reqRows.length === 0) {
       return res.status(404).send("Request not found");
     }
-    const request = reqRows[0];
-
-    // 2) ดึงข้อมูลรายการ (asset_request_items)
     const [itemRows] = await dbconnection.execute(
       "SELECT * FROM asset_request_items WHERE req_asset_id = ?",
       [req_asset_id]
     );
-
-    // 3) Render หน้า asset_request_items.EJS
     res.render('asset_request_items', {
-      request: request,
+      request: reqRows[0],
       items: itemRows,
       user_name: req.session.user_name,
-      role: req.session.role
+      role: req.session.role,
+      // ส่ง userID ไปด้วย (ถ้ามี)
+      userID: req.session.userID || null 
     });
   } catch (err) {
     console.error(err);
@@ -475,59 +491,57 @@ app.get('/asset_requests/:req_asset_id/items', async (req, res) => {
 });
 
 
+// POST /api/asset_request_items/:item_id/process
+app.post('/api/asset_request_items/:item_id/process', isAdmin, async (req, res) => {
+  const { item_id } = req.params;
+  const { approved_quantity, admin_comment } = req.body;
 
-// ฟังก์ชันเช็คสถานะรวม
-async function updateRequestStatus(req_asset_id) {
-  // ดึง item_status ทั้งหมดของ req_id
-  const [rows] = await dbconnection.execute(
-    `SELECT item_status FROM asset_request_items WHERE req_asset_id = ?`,
-    [req_asset_id]
-  );
-
-  const statuses = rows.map(r => r.item_status);
-
-  let newStatus = 'Pending';
-  if (statuses.every(s => s === 'Rejected')) {
-    newStatus = 'Rejected';
-  } else if (statuses.every(s => s === 'Approved')) {
-    newStatus = 'Approved';
-  } else if (statuses.some(s => s === 'Approved')) {
-    // บางส่วน approved, บางส่วน pending/rejected
-    newStatus = 'Partially Approved';
+  // *** จุดที่แก้ไข ***
+  // เปลี่ยนไปใช้ req.session.userID (ตัวพิมพ์ใหญ่) ให้ตรงกับโค้ด Login ของคุณ
+  let approver_id = null; 
+  if (req.session && req.session.userID) {
+      approver_id = req.session.userID;
+  } else {
+      console.warn('WARNING: Cannot find req.session.userID. The approver_id will be saved as NULL.');
   }
 
-  await dbconnection.execute(
-    `UPDATE asset_requests
-     SET req_status = ?
-     WHERE req_asset_id = ?`,
-    [newStatus, req_asset_id]
-  );
-}
+  if (approved_quantity === undefined || approved_quantity === null || isNaN(parseInt(approved_quantity))) {
+      return res.status(400).json({ error: 'กรุณาระบุจำนวนที่อนุมัติเป็นตัวเลข' });
+  }
+  const approvedQuantityNumber = parseInt(approved_quantity, 10);
 
-// เรียกใช้หลังอนุมัติ item
-app.post('/api/asset_request_items/:item_id/approve', isAdmin, async (req, res) => {
   try {
-    const { item_id } = req.params;
-    const { action, admin_comment, req_asset_id  } = req.body;
+    const [items] = await dbconnection.execute("SELECT * FROM asset_request_items WHERE item_id = ?", [item_id]);
+    if (items.length === 0) {
+      return res.status(404).json({ error: 'ไม่พบรายการที่ต้องการ' });
+    }
+    const item = items[0];
+    const requestedQuantity = item.item_quantity;
+    const req_asset_id = item.req_asset_id;
 
-    if (!['Approved','Rejected'].includes(action)) {
-      return res.status(400).json({ error: 'Invalid action' });
+    let newItemStatus = '';
+    if (approvedQuantityNumber >= requestedQuantity) {
+      newItemStatus = 'Approved';
+    } else if (approvedQuantityNumber > 0) {
+      newItemStatus = 'Partially Approved';
+    } else {
+      newItemStatus = 'Rejected';
     }
 
     await dbconnection.execute(
-      `UPDATE asset_request_items
-       SET item_status = ?, item_admin_comment = ?
-       WHERE item_id = ?`,
-      [action, admin_comment || null, item_id]
+      `UPDATE asset_request_items 
+        SET item_status = ?, item_quantity_approved = ?, item_admin_comment = ?
+        WHERE item_id = ?`,
+      [newItemStatus, approvedQuantityNumber, admin_comment || null, item_id]
     );
+    
+    await updateRequestStatus(req_asset_id, approver_id, dbconnection);
 
-    // อัปเดตสถานะใบงานรวม
-    await updateRequestStatus(req_asset_id);
+    res.json({ success: true, message: `รายการ #${item_id} ได้รับการอัปเดตสถานะเป็น ${newItemStatus}` });
 
-    res.json({ message: 'Item updated successfully' });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
+    console.error("Error processing item approval:", err);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
   }
 });
 
@@ -621,234 +635,6 @@ app.post("/api/asset_requests", /* ifNotLoggedIn, */ async (req, res) => {
   }
 });
 
-
-
-
-
-
-app.post('/api/asset_transfers', async (req, res) => {
-  try {
-    const { req_asset_id, as_asset_number, reason } = req.body;
-
-    // 1) เช็คว่ามี AT ที่ค้างอยู่ไหม
-    const [existing] = await dbconnection.execute(
-      "SELECT * FROM asset_transfers WHERE req_asset_id = ? AND at_status = 'Pending'",
-      [req_asset_id]
-    );
-    if (existing.length > 0) {
-      return res.status(400).json({
-        error: `Cannot create new AT for ${req_asset_id} because an existing transfer is still Pending.`
-      });
-    }
-
-    // 2) สร้างเลข ATxxxxx ต่อจากตัวล่าสุด
-    const [rows] = await dbconnection.execute(
-      "SELECT transfer_number FROM asset_transfers ORDER BY transfer_id DESC LIMIT 1"
-    );
-    let newTransferNumber;
-    if (rows.length > 0) {
-      const lastNum = parseInt(rows[0].transfer_number.replace('AT',''),10);
-      newTransferNumber = `AT${String(lastNum+1).padStart(5,'0')}`;
-    } else {
-      newTransferNumber = 'AT00001';
-    }
-
-    // 3) Insert ลงตาราง asset_transfers (at_status = 'Pending' เป็นค่าเริ่มต้น)
-    await dbconnection.execute(
-      `INSERT INTO asset_transfers 
-         (transfer_number, req_asset_id, as_asset_number, transfer_reason, at_status)
-       VALUES (?, ?, ?, ?, 'Pending')`,
-      [newTransferNumber, req_asset_id, as_asset_number, reason || null]
-    );
-
-    res.status(201).json({
-      message: `Asset transfer ${newTransferNumber} created for ${req_asset_id}.`,
-      transfer_number: newTransferNumber
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'dr' });
-  }
-});
-
-
-// POST /api/asset_transfers/:transfer_id/receive
-app.post('/api/asset_transfers/:transfer_id/receive', async (req, res) => {
-  try {
-    const { transfer_id } = req.params;
-    // อัปเดต at_status เป็น 'Received'
-    await dbconnection.execute(
-      "UPDATE asset_transfers SET at_status = 'Received' WHERE transfer_id = ?",
-      [transfer_id]
-    );
-    res.json({ message: `Transfer ${transfer_id} is now Received.` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
-// POST /api/asset_transfers/:transfer_id/cancel
-app.post('/api/asset_transfers/:transfer_id/cancel', async (req, res) => {
-  try {
-    const { transfer_id } = req.params;
-    // อัปเดต at_status เป็น 'Cancelled'
-    await dbconnection.execute(
-      "UPDATE asset_transfers SET at_status = 'Cancelled' WHERE transfer_id = ?",
-      [transfer_id]
-    );
-    res.json({ message: `Transfer ${transfer_id} is now Cancelled.` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Database error' });
-  }
-});
-
-
-
-
-// ตัวอย่างใน router.js หรือ server.js
-app.get('/asset_transfers/:req_asset_id', isAdmin, async (req, res) => {
-  try {
-    const { req_asset_id } = req.params;
-    // ดึงรายการ items จาก DB เช่น asset_request_items
-    const [rows] = await dbconnection.execute(
-      "SELECT item_name, item_quantity FROM asset_request_items WHERE req_asset_id = ? AND item_status = 'Approved'",
-      [req_asset_id]
-    );
-    // ส่ง rows ให้ EJS ในชื่อ items
-    res.render('asset_transfers', {
-      req_asset_id,
-      items: rows,
-      user_name: req.session.user_name,
-      role: req.session.role
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Database errordada");
-  }
-});
-
-
-
-
-app.post('/api/asset_transfers/multiple', isAdmin, async (req, res) => {
-  try {
-    const { req_asset_id, reason, items } = req.body;
-    const allAS = Object.values(items).flat();
-
-    // ตรวจสอบว่าไม่มี AS ซ้ำ
-    const seen = new Set();
-    const dup = allAS.find(as => {
-      if (seen.has(as)) return true;
-      seen.add(as);
-      return false;
-    });
-    if (dup) {
-      return res.status(400).json({ error: `เลขทรัพย์สินซ้ำ: ${dup}` });
-    }
-
-    // ดึงรายการที่ผู้ใช้ขอใน AR
-    const [requestedItems] = await dbconnection.execute(`
-      SELECT item_id, item_quantity, item_name 
-      FROM asset_request_items 
-      WHERE req_asset_id = ?`, [req_asset_id]);
-
-    // Map item_id → item_name, quantity
-    const itemIdToName = {};
-    const itemNameMap = {};
-    requestedItems.forEach(row => {
-      itemIdToName[row.item_id] = row.item_name;
-      itemNameMap[row.item_name] = {
-        item_id: row.item_id,
-        quantity: row.item_quantity,
-        count: 0
-      };
-    });
-
-    // ดึงข้อมูล AS จริง
-    const placeholders = allAS.map(() => '?').join(',');
-    const [assets] = await dbconnection.execute(
-      `SELECT as_asset_number, as_category 
-       FROM assets 
-       WHERE as_asset_number IN (${placeholders})`, allAS);
-
-    // ตรวจสอบแต่ละ item_id
-    for (const [item_id, asList] of Object.entries(items)) {
-      const expectedName = itemIdToName[item_id];
-      if (!expectedName) {
-        return res.status(400).json({ error: `ไม่พบ item_id ${item_id} ในใบ AR` });
-      }
-
-      for (const as_number of asList) {
-        const asset = assets.find(a => a.as_asset_number === as_number);
-        if (!asset) {
-          return res.status(400).json({ error: `ไม่พบ AS ${as_number}` });
-        }
-        if (asset.as_category !== expectedName) {
-          return res.status(400).json({ 
-            error: `AS ${as_number} ประเภท ${asset.as_category} ไม่ตรงกับที่ขอ (${expectedName})` 
-          });
-        }
-      }
-
-      if (asList.length > itemNameMap[expectedName].quantity) {
-        return res.status(400).json({
-          error: `รายการ ${expectedName} เกินจำนวนที่ขอ (ขอ ${itemNameMap[expectedName].quantity}, ใส่ ${asList.length})`
-        });
-      }
-
-      itemNameMap[expectedName].count += asList.length;
-    }
-
-    // ตรวจสอบว่า AS ถูกใช้ใน AT ที่ยังไม่เสร็จ
-    const [inUse] = await dbconnection.execute(
-      `SELECT as_asset_number 
-       FROM asset_transfers 
-       WHERE as_asset_number IN (${placeholders}) 
-       AND at_status NOT IN ('Completed','Cancelled')`, allAS);
-
-    if (inUse.length > 0) {
-      const used = inUse.map(r => r.as_asset_number).join(', ');
-      return res.status(400).json({ error: `AS ที่ถูกใช้งานแล้ว: ${used}` });
-    }
-
-    // สร้างเลข AT ใหม่
-    const [[{ max }]] = await dbconnection.execute(
-      'SELECT MAX(transfer_id) AS max FROM asset_transfers');
-    const newTransferNumber = `AT${String((max || 0) + 1).padStart(5, '0')}`;
-    const createdBy = req.session.userID;
-
-    // เตรียม insert
-    const insertValues = [];
-    for (const [item_id, asList] of Object.entries(items)) {
-      for (const as_number of asList) {
-        insertValues.push([
-          newTransferNumber,
-          req_asset_id,
-          as_number,
-          reason || null,
-          'Pending',
-          createdBy
-        ]);
-      }
-    }
-
-    await dbconnection.query(`
-      INSERT INTO asset_transfers 
-        (transfer_number, req_asset_id, as_asset_number, transfer_reason, at_status, created_by) 
-      VALUES ?`, [insertValues]);
-
-    res.status(201).json({
-      message: `สร้างใบโอน ${newTransferNumber} สำเร็จ จำนวน ${insertValues.length} รายการ`
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'เกิดข้อผิดพลาดในฝั่งเซิร์ฟเวอร์' });
-  }
-});
 
 
 

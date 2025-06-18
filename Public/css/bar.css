@@ -18,9 +18,6 @@ body{
 
 
 .sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
   height: 100vh; /* ให้เต็มความสูงของ Viewport */
   width: 250px; /* หรือกำหนดตามต้องการ */
   background-color: #343a40; /* สีพื้นหลัง */
@@ -36,7 +33,6 @@ body{
 
 /* CSS สำหรับ Layout */
 .main-container {
-  margin-left: 16.66%; /* ประมาณ 2/12 หรือ 1/6 ของ Bootstrap Grid */
   display: flex;
   height: 100vh; /* ให้หน้าเว็บเต็มจอ */
 }
