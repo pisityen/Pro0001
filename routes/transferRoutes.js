@@ -2,12 +2,75 @@ const express = require('express');
 const router = express.Router();
 const dbconnection = require('../database');
 
+// Middleware (ควรมีอยู่แล้ว)
 function ifNotLoggedIn(req, res, next) {
   if (!req.session || !req.session.userID) {
     return res.redirect('/login');
   }
   next();
 }
+
+function isAdmin(req, res, next) {
+    if (req.session && req.session.role === 'admin') {
+      return next();
+    }
+    res.status(403).send('Access denied. Admins only.');
+}
+
+
+
+// ==========================================================
+//     Route สำหรับ "Admin" ยืนยันการรับของคืน
+// ==========================================================
+router.post('/api/asset_transfers/confirm_return', ifNotLoggedIn, isAdmin, async (req, res) => {
+    const { transfer_number } = req.body;
+
+    if (!transfer_number) {
+        return res.status(400).json({ success: false, message: 'ไม่พบหมายเลขใบโอน' });
+    }
+    
+    // เริ่มต้น Transaction เพื่อความปลอดภัยของข้อมูล
+    try {
+        await dbconnection.beginTransaction();
+        
+        // 1. ดึงรายการทรัพย์สินทั้งหมดในใบโอนคืนนี้ที่ยังเป็น "Pending"
+        const [assetsToReturn] = await dbconnection.execute(
+            "SELECT as_asset_number FROM asset_transfers WHERE transfer_number = ? AND at_status = 'Pending' AND transfer_type = 'return'",
+            [transfer_number]
+        );
+
+        if (assetsToReturn.length === 0) {
+            await dbconnection.rollback();
+            return res.status(404).json({ success: false, message: 'ไม่พบรายการที่รอการรับคืนสำหรับใบโอนนี้' });
+        }
+        
+        // รวบรวมหมายเลขทรัพย์สินทั้งหมด
+        const assetNumbers = assetsToReturn.map(a => a.as_asset_number);
+        const placeholders = assetNumbers.map(() => '?').join(',');
+
+        // 2. อัปเดตสถานะใบโอนคืนเป็น 'Completed'
+        await dbconnection.execute(
+            `UPDATE asset_transfers SET at_status = 'Completed' WHERE transfer_number = ? AND transfer_type = 'return' AND at_status = 'Pending'`,
+            [transfer_number]
+        );
+
+        // 3. (จุดสำคัญ) นำทรัพย์สินกลับเข้าสต็อก (ตั้ง as_location เป็น NULL)
+        await dbconnection.execute(
+            `UPDATE assets SET as_location = NULL WHERE as_asset_number IN (${placeholders})`,
+            assetNumbers
+        );
+
+        // ยืนยัน Transaction ถ้าทุกอย่างสำเร็จ
+        await dbconnection.commit();
+        res.status(200).json({ success: true, message: `ยืนยันการรับคืนสำหรับใบโอน ${transfer_number} สำเร็จ` });
+
+    } catch (err) {
+        // หากเกิดข้อผิดพลาด ให้ยกเลิกการกระทำทั้งหมด
+        await dbconnection.rollback();
+        console.error("Error confirming return:", err);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
+    }
+});
 
 
 router.get('/asset_transfers/:req_asset_id', async (req, res) => {
@@ -164,78 +227,92 @@ router.post('/api/asset_transfers/multiple', async (req, res) => {
 
 
 
-// GET /asset_transfers
-router.get('/all_transfers', async (req, res) => {
+router.get('/all_transfers', ifNotLoggedIn, async (req, res) => {
   try {
     const role = req.session.role;
     const userId = req.session.userID;
 
-    let sql = '';
-    let params = [];
+    // ดึงค่าจากฟอร์มค้นหาทั้งหมด
+    const { search, type, status, startDate, endDate, assetNumber, assetCategory } = req.query;
 
-    if (role === 'admin') {
-      // Admin เห็นทุกอย่าง
-      sql = `
-        SELECT 
-          t.transfer_number,
-          t.req_asset_id,
-          t.at_status,
-          t.transfer_type,
-          t.transfer_date,
-          c.total_items
-        FROM (
-          SELECT transfer_number, MAX(transfer_id) AS max_id
-          FROM asset_transfers
-          GROUP BY transfer_number
-        ) AS s
-        JOIN asset_transfers t ON t.transfer_number = s.transfer_number AND t.transfer_id = s.max_id
-        JOIN (
-          SELECT transfer_number, COUNT(as_asset_number) AS total_items
-          FROM asset_transfers
-          GROUP BY transfer_number
-        ) AS c ON c.transfer_number = s.transfer_number
-        ORDER BY s.max_id DESC
-      `;
-    } else {
-      // User: ดูได้ทั้งใบเบิกที่ตัวเองขอ และใบคืนที่ตัวเองเป็นคนคืน
-      sql = `
-        SELECT 
-          t.transfer_number,
-          t.req_asset_id,
-          t.at_status,
-          t.transfer_type,
-          t.transfer_date,
-          c.total_items
-        FROM (
-          SELECT transfer_number, MAX(transfer_id) AS max_id
-          FROM asset_transfers
-          GROUP BY transfer_number
-        ) AS s
-        JOIN asset_transfers t ON t.transfer_number = s.transfer_number AND t.transfer_id = s.max_id
-        JOIN (
-          SELECT transfer_number, COUNT(as_asset_number) AS total_items
-          FROM asset_transfers
-          GROUP BY transfer_number
-        ) AS c ON c.transfer_number = s.transfer_number
-        LEFT JOIN asset_requests ar ON t.req_asset_id = ar.req_asset_id
-        WHERE 
-          (t.transfer_type = 'request' AND ar.req_user_id = ?)
-          OR
-          (t.transfer_type = 'return' AND t.created_by = ?)
-        ORDER BY s.max_id DESC
-      `;
-      params = [userId, userId];
+    let params = [];
+    let whereConditions = [];
+
+    // --- ส่วนของ User ---
+    if (role !== 'admin') {
+      whereConditions.push(`((t.transfer_type = 'request' AND ar.req_user_id = ?) OR (t.transfer_type = 'return' AND t.created_by = ?))`);
+      params.push(userId, userId);
     }
 
-    const [rows] = await dbconnection.execute(sql, params);
+    // --- สร้างเงื่อนไขการกรองแบบไดนามิก ---
+    if (search) {
+      whereConditions.push(`(t.transfer_number LIKE ? OR t.req_asset_id LIKE ?)`);
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    if (type) {
+      whereConditions.push(`t.transfer_type = ?`);
+      params.push(type);
+    }
+    if (status) {
+      whereConditions.push(`t.at_status = ?`);
+      params.push(status);
+    }
+    if (startDate) {
+        whereConditions.push(`DATE(t.transfer_date) >= ?`);
+        params.push(startDate);
+    }
+    if (endDate) {
+        whereConditions.push(`DATE(t.transfer_date) <= ?`);
+        params.push(endDate);
+    }
+    if (assetNumber) {
+        whereConditions.push(`EXISTS (SELECT 1 FROM asset_transfers at_sub WHERE at_sub.transfer_number = t.transfer_number AND at_sub.as_asset_number LIKE ?)`);
+        params.push(`%${assetNumber}%`);
+    }
+    if (assetCategory) {
+        whereConditions.push(`EXISTS (SELECT 1 FROM asset_transfers at_sub JOIN assets a_sub ON at_sub.as_asset_number = a_sub.as_asset_number WHERE at_sub.transfer_number = t.transfer_number AND a_sub.as_category = ?)`);
+        params.push(assetCategory);
+    }
+
+    // --- สร้าง SQL Query ---
+    let sqlQuery = `
+      SELECT 
+        t.transfer_number, t.req_asset_id, t.at_status, t.transfer_type, t.transfer_date,
+        ar.req_user_name AS requester_name, u.user_name AS creator_name, c.total_items
+      FROM (
+        SELECT transfer_number, MAX(transfer_id) AS max_id FROM asset_transfers GROUP BY transfer_number
+      ) AS latest_transfer
+      JOIN asset_transfers t ON t.transfer_number = latest_transfer.transfer_number AND t.transfer_id = latest_transfer.max_id
+      JOIN (
+        SELECT transfer_number, COUNT(as_asset_number) AS total_items FROM asset_transfers GROUP BY transfer_number
+      ) AS c ON c.transfer_number = latest_transfer.transfer_number
+      LEFT JOIN asset_requests ar ON t.req_asset_id = ar.req_asset_id
+      LEFT JOIN users u ON t.created_by = u.user_id
+    `;
+    
+    if (whereConditions.length > 0) {
+      sqlQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+    }
+    
+    sqlQuery += ` ORDER BY latest_transfer.max_id DESC`;
+
+    const [transfers] = await dbconnection.execute(sqlQuery, params);
+
+    // *** ส่วนที่เพิ่มเข้ามา: ดึงรายการประเภททรัพย์สินทั้งหมดมาสร้าง Dropdown ***
+    const [assetCategories] = await dbconnection.execute(
+        "SELECT DISTINCT as_category FROM assets WHERE as_category IS NOT NULL AND as_category != '' ORDER BY as_category ASC"
+    );
 
     res.render('all_transfers', {
-      transfers: rows,
+      transfers: transfers,
+      assetCategories: assetCategories, // ส่งรายการประเภทไปให้หน้าเว็บ
       user_name: req.session.user_name,
-      role: req.session.role
+      role: req.session.role,
+      filters: { search, type, status, startDate, endDate, assetNumber, assetCategory } 
     });
+
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching all transfers:", err);
     res.status(500).send("Database error");
   }
 });
@@ -247,26 +324,28 @@ router.get('/all_transfers', async (req, res) => {
 
 
 
-  // ตัวอย่างใน routes/transferRoutes.js
-router.get('/transfer_detail/:transfer_number', async (req, res) => {
+router.get('/transfer_detail/:transfer_number', ifNotLoggedIn, async (req, res) => {
   try {
     const { transfer_number } = req.params;
-    // JOIN asset_transfers กับ assets
+
+    // *** จุดที่แก้ไข: เพิ่ม t.transfer_type, ar.req_user_name, และ u.user_name เข้าไปใน SELECT ***
     const [rows] = await dbconnection.execute(`
       SELECT 
         t.transfer_number,
         t.req_asset_id,
         t.as_asset_number,
         t.at_status,
-        t.transfer_reason,
         t.transfer_date,
-        t.admin_comment,
+        t.transfer_type,          -- ดึงข้อมูลประเภทใบโอนมาด้วย
         a.as_name,
         a.as_category,
-        a.as_serial_number
+        a.as_serial_number,
+        ar.req_user_name,         -- ดึงชื่อผู้ขอเบิกมาด้วย
+        u.user_name AS creator_name -- ดึงชื่อผู้สร้างใบโอน (สำหรับใบคืน)
       FROM asset_transfers t
-      JOIN assets a 
-        ON t.as_asset_number = a.as_asset_number
+      JOIN assets a ON t.as_asset_number = a.as_asset_number
+      LEFT JOIN asset_requests ar ON t.req_asset_id = ar.req_asset_id
+      LEFT JOIN users u ON t.created_by = u.user_id
       WHERE t.transfer_number = ?
     `, [transfer_number]);
 
@@ -274,19 +353,16 @@ router.get('/transfer_detail/:transfer_number', async (req, res) => {
       return res.status(404).send("Transfer not found");
     }
 
-    // Render หน้า EJS
     res.render('transfer_detail', {
-      transfer_number,
       transferItems: rows,
       user_name: req.session.user_name,
       role: req.session.role
     });
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching transfer detail:", err);
     res.status(500).send("Database error");
   }
 });
-
 
 
 

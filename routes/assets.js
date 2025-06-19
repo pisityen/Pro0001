@@ -65,16 +65,6 @@ router.get('/asset_management', isAdmin, (req, res) => {
 });
 
 
-router.get('/create_requests', (req, res) => {
-  if (!req.session || !req.session.user_name) {
-    // ถ้ายังไม่มี session หรือไม่มี user_name
-    return res.redirect('/login');
-  }
-  // ส่งตัวแปร user_name ไปยัง EJS
-  
-  res.render('create_requests', { user_name: req.session.user_name,user_id: req.session.userID,role: req.session.role });
-});
-
 
 // ดึงข้อมูลทรัพย์สินทั้งหมด (Admin เท่านั้น)
 router.get('/asset_requests', isAdmin, (req, res) => {
@@ -329,108 +319,6 @@ router.post('/delete/asset_requests/:id', ifNotLoggedIn, (req, res) => {
     .then(() => res.redirect('/asset_requests'))
     .catch(err => res.status(500).send('Database error'));
 });
-
-
-router.get('/create_requests', ifNotLoggedIn, (req, res) => {
-  res.render('asset_transfers', {
-    user_name: req.session.user_name,
-    role: req.session.role
-  });
-  res.render('create_requests', { title: 'Add New Asset' });
-});
-
-
-
-// ตรวจสอบให้แน่ใจว่าคุณ import/require dbconnection ตรงตามที่ตั้งค่าไว้
-// และมี middleware ifNotLoggedIn (หรือใช้ isUser/isAdmin ตามต้องการ)
-
-app.post("/api/asset_requests", /* ifNotLoggedIn, */ async (req, res) => {
-  try {
-
-    function ifNotLoggedInAPI(req, res, next) {
-      if (!req.session.isLoggedIn) {
-        return res.status(401).json({ error: 'Please login first' });
-      }
-      next();
-    }
-    
-
-    // ดึงข้อมูลจาก body
-    // (หากฝั่ง client ส่งมาเป็น user_id หรือ reason และ items/request_items ให้ปรับตามจริง)
-    const { user_id, user_name, reason, request_items } = req.body;
-
-    // ตรวจสอบความถูกต้องของข้อมูล
-    if (!user_id || !user_name || !reason || !Array.isArray(request_items) || request_items.length === 0) {
-      console.error("Invalid input data:", req.body);
-      return res.status(400).json({ error: "Invalid input data" });
-    }
-
-    // สร้าง req_asset_id ใหม่จากรายการล่าสุด
-    const [rows] = await dbconnection.execute(
-      "SELECT req_asset_id FROM asset_requests ORDER BY req_id DESC LIMIT 1"
-    );
-    let newReqId;
-    if (rows.length > 0) {
-      const lastNumber = parseInt(rows[0].req_asset_id.replace('AR', ''), 10);
-      newReqId = `AR${String(lastNumber + 1).padStart(5, '0')}`;
-    } else {
-      newReqId = 'AR00001';
-    }
-
-    // วันที่ปัจจุบัน
-    const now = new Date();
-
-    // INSERT ลงในตาราง asset_requests
-    await dbconnection.execute(
-      `INSERT INTO asset_requests 
-        (req_asset_id, req_user_name, req_user_id, req_request_date, req_status, req_reason, req_admin_comment, req_updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        newReqId,         // req_asset_id
-        user_name,        // req_user_name
-        user_id,          // req_user_id
-        now,              // req_request_date
-        'Pending',        // req_status
-        reason,           // req_reason
-        null,             // req_admin_comment (ใส่ null ไว้ก่อน หรือจะส่งจาก client ก็ได้)
-        now               // req_updated_at
-      ]
-    );
-
-    // INSERT ลงในตาราง asset_request_items (ถ้ามี)
-    // สมมติคอลัมน์: item_id (PK), req_asset_id, item_name, item_quantity, item_status, item_updated_at
-    for (const item of request_items) {
-      if (!item.item_name || !item.item_quantity) {
-        console.warn("Skipping invalid item:", item);
-        continue;
-      }
-
-      await dbconnection.execute(
-        `INSERT INTO asset_request_items 
-          (req_asset_id, item_name, item_quantity, item_status, item_updated_at) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          newReqId,           // ผูกกับ req_asset_id เดียวกัน
-          item.item_name,
-          item.item_quantity,
-          'Pending',          // เริ่มต้นเป็น Pending
-          now
-        ]
-      );
-    }
-
-    return res.status(201).json({
-      message: "Request submitted successfully",
-      req_asset_id: newReqId
-    });
-
-  } catch (err) {
-    console.error("Database error:", err);
-    return res.status(500).json({ error: "Database error" });
-  }
-});
-
-
 
 // GET /api/assets/:as_number
 router.get('/api/assets/:as_number', async (req, res) => {

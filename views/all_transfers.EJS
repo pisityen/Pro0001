@@ -1,234 +1,177 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="th">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IT Support</title>
-
-  <!-- CSS -->
+  <title>IT Support - All Transfers</title>
   <link rel="stylesheet" href="/css/bar.css" />
   <link rel="stylesheet" href="/css/styles.css" />
-
-  <!-- Bootstrap 5.3 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-
 <body>
   <div class="main-container d-flex">
-
-      <!-- Sidebar -->
-      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
-        <!-- ส่วนเนื้อหาใน Sidebar -->
+    <!-- Sidebar (โค้ดเดิม) -->
+    <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
         <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
-          <h1 class="fs-5 text-uppercase">
-            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
-            <span class="text-white">Management</span>
-          </h1>
+            <h1 class="fs-5 text-uppercase">
+                <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+                <span class="text-white">Management</span>
+            </h1>
         </div>
         <ul class="list-unstyled px-2">
-          <li class="mb-2">
-          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
-          </li>
-          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
-          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
-          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
-            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
+            <% if (role === 'admin') { %>
+                <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white">Dashboard</a></li>
+                <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลทรัพย์สิน</a></li>
+            <% } %>
+            <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white">เบิกทรัพย์สิน</a></li>
+            <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
+            <% if (role === 'admin') { %>
+                <li class="mb-2"><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลผู้ใช้งาน</a></li>
+            <% } %>
         </ul>
         <div class="mt-auto px-2 pb-3 text-center">
-          <div class="text-white mb-2">
-            User : <%= user_name %>
-          </div>
-          <div class="text-white mb-2">
-            Role : <%= role %>
-          </div>
-          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
-            <i class="fas fa-sign-out-alt me-2"></i> Logout
-          </a>
+            <div class="text-white mb-2">User : <%= user_name %></div>
+            <div class="text-white mb-2">Role : <%= role %></div>
+            <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
         </div>
-      </div>
-  
-        <!-- //หน้าจอหลัก// -->
-    <div class="content flex-fill">
-
-      <!-- ส่วนหัวหรือ Title -->
-      <nav class="navbar navbar-light bg-light px-3">
-        <div class="container-fluid">
-          <h2 class="navbar-brand fs-5">Asset</h2>
-          <!-- ปุ่มสำหรับเพิ่มทรัพย์สิน -->
-          <a href="/asset_transfers_return/return" class="btn btn-success">สร้างใบงานคืนทรัพย์สิน</a>
-        </div>
-      </nav>
-
-      <!-- ฟอร์มตัวอย่าง (สามารถปรับแก้คอลัมน์ตามจริง) -->
-      <div class="container-fluid mt-3">
-        <form>
-          <div class="row g-3 mb-3">
-            <div class="col-md-3">
-              <label for="assetNo" class="form-label">Asset No</label>
-              <input type="text" class="form-control" id="assetNo" readonly>
-            </div>
-            <div class="col-md-3">
-              <label for="requestFrom" class="form-label">Transfer No</label>
-              <input type="text" class="form-control" id="requestFrom">
-            </div>
-            <div class="col-md-3">
-              <label for="requestTo" class="form-label">Transfer Type</label>
-              <input type="text" class="form-control" id="requestTo">
-            </div>
-            <div class="col-md-3">
-              <label for="responsiblePerson" class="form-label">Status</label>
-              <input type="text" class="form-control" id="responsiblePerson">
-            </div>
-          </div>
-          <!-- <div class="mb-3">
-            <label for="reason" class="form-label">Reason</label>
-            <input type="text" class="form-control" id="reason">
-          </div> -->
-        </form>
-      </div>
-
-      <!-- ตารางแสดงรายการทรัพย์สิน -->
-      <div class="container-fluid">
-        <div class="table-responsive">
-          <table class="table table-striped table-hover align-middle">
-            <thead class="table-dark">
-              <tr>
-                <th>Transfer Number</th>
-                <th>Asset Required</th>
-                <th>Status</th>
-                <th>Type</th>
-                <th>Date</th>
-                <th>Total Items</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% if (transfers && transfers.length > 0) { %>
-                <% transfers.forEach(t => { %>
-                  <tr>
-                    <td><%= t.transfer_number %></td>
-                    <td><%= t.req_asset_id %></td>
-                    <td><%= t.at_status %></td>
-                    <td>
-                      <% if (t.transfer_type === 'Return') { %>
-                        <span class="badge bg-warning text-dark">Return</span>
-                      <% } else { %>
-                        <span class="badge bg-primary">Request</span>
-                      <% } %>
-                    </td>
-
-                    <td><%= new Date(t.transfer_date).toLocaleDateString('en-GB', { 
-                          year: 'numeric', 
-                          month: '2-digit', 
-                          day: '2-digit'
-                          }) 
-                          %>
-                        </td>
-                    <td><%= t.total_items %></td>
-                    <td>
-                      <!-- ลิงก์ไปดูรายละเอียด -->
-                      <a href="/transfer_detail/<%= t.transfer_number %>" class="btn btn-info btn-sm">
-                        View Details
-                      </a>
-                      <% if (role === 'admin') { %>
-                      <form action="/delete/transfer/<%= t.transfer_number %>" method="POST" style="display: inline;">
-                        <button type="submit" class="btn btn-danger btn-sm" 
-                                 onclick="return confirm('Are you sure?')"> Delete
-                        </button>
-                      </form>
-                      <% } %>
-                    </td>
-                  </tr>
-                <% }) %>
-              <% } else { %>
-                <tr>
-                  <td colspan="6" class="text-center">No transfers found</td>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      
-      <!-- End ตาราง -->
-
     </div>
-    <!-- End Main Content -->
+    
+    <!-- Main Content -->
+    <div class="content flex-grow-1 p-4 bg-light">
+      <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3><i class="fas fa-list-ul me-2"></i> รายการใบโอนทั้งหมด</h3>
+            <% if (role !== 'admin') { %>
+                <a href="/my-assets" class="btn btn-primary">
+                    <i class="fas fa-undo-alt me-2"></i> สร้างใบงานคืนทรัพย์สิน
+                </a>
+            <% } %>
+        </div>
 
+        <!-- *** ส่วนที่อัปเกรด: ฟอร์มสำหรับกรองข้อมูลขั้นสูง *** -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <form action="/all_transfers" method="GET" class="row g-3 align-items-end">
+                    <div class="col-lg-3 col-md-6">
+                        <label for="search" class="form-label">ค้นหา AT/AR</label>
+                        <input type="text" name="search" id="search" class="form-control" value="<%= filters.search || '' %>">
+                    </div>
+                    <div class="col-lg-2 col-md-6">
+                        <label for="assetNumber" class="form-label">หมายเลขทรัพย์สิน</label>
+                        <input type="text" name="assetNumber" id="assetNumber" class="form-control" value="<%= filters.assetNumber || '' %>">
+                    </div>
+                    <!-- *** จุดที่แก้ไข: เปลี่ยนเป็น Dropdown *** -->
+                    <div class="col-lg-2 col-md-6">
+                        <label for="assetCategory" class="form-label">ประเภททรัพย์สิน</label>
+                        <select name="assetCategory" id="assetCategory" class="form-select">
+                            <option value="">ทั้งหมด</option>
+                            <% assetCategories.forEach(cat => { %>
+                                <option value="<%= cat.as_category %>" <%= filters.assetCategory === cat.as_category ? 'selected' : '' %>>
+                                    <%= cat.as_category %>
+                                </option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col-lg-2 col-md-6">
+                        <label for="type" class="form-label">ประเภทใบโอน</label>
+                        <select name="type" id="type" class="form-select">
+                            <option value="">ทั้งหมด</option>
+                            <option value="request" <%= filters.type === 'request' ? 'selected' : '' %>>เบิก</option>
+                            <option value="return" <%= filters.type === 'return' ? 'selected' : '' %>>คืน</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-2 col-md-6">
+                        <label for="status" class="form-label">สถานะ</label>
+                        <select name="status" id="status" class="form-select">
+                            <option value="">ทั้งหมด</option>
+                            <option value="Pending" <%= filters.status === 'Pending' ? 'selected' : '' %>>Pending</option>
+                            <option value="Completed" <%= filters.status === 'Completed' ? 'selected' : '' %>>Completed</option>
+                            <option value="Cancelled" <%= filters.status === 'Cancelled' ? 'selected' : '' %>>Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label for="startDate" class="form-label">วันที่เริ่มต้น</label>
+                        <input type="date" name="startDate" id="startDate" class="form-control" value="<%= filters.startDate || '' %>">
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label for="endDate" class="form-label">วันที่สิ้นสุด</label>
+                        <input type="date" name="endDate" id="endDate" class="form-control" value="<%= filters.endDate || '' %>">
+                    </div>
+                    <div class="col-lg-3 col-md-12 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2"><i class="fas fa-filter me-1"></i> กรองข้อมูล</button>
+                        <a href="/all_transfers" class="btn btn-outline-secondary">ล้างค่า</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <!-- ... โค้ดตารางของคุณยังคงเหมือนเดิม ... -->
+                <thead class="table-light">
+                  <tr>
+                    <th>เลขที่ใบโอน</th>
+                    <th>ประเภท</th>
+                    <th>ผู้เกี่ยวข้อง</th>
+                    <th>อ้างอิงใบเบิก</th>
+                    <th>สถานะ</th>
+                    <th>จำนวน (ชิ้น)</th>
+                    <th>วันที่</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% if (transfers && transfers.length > 0) { %>
+                    <% transfers.forEach(t => { %>
+                      <tr>
+                        <td><strong><%= t.transfer_number %></strong></td>
+                        <td>
+                          <% if (t.transfer_type === 'Return') { %>
+                            <span class="badge bg-warning text-dark"><i class="fas fa-undo-alt me-1"></i> คืน</span>
+                          <% } else { %>
+                            <span class="badge bg-info"><i class="fas fa-share me-1"></i> เบิก</span>
+                          <% } %>
+                        </td>
+                        <td>
+                          <% if (t.transfer_type === 'Return') { %>
+                            <i class="fas fa-user-minus me-1 text-muted"></i> <%= t.creator_name || '-' %>
+                          <% } else { %>
+                            <i class="fas fa-user-plus me-1 text-muted"></i> <%= t.requester_name || '-' %>
+                          <% } %>
+                        </td>
+                        <td><%= t.req_asset_id || '-' %></td>
+                        <td>
+                          <span class="badge rounded-pill 
+                            <% if (t.at_status === 'Completed') { %> bg-success
+                            <% } else if (t.at_status === 'Cancelled') { %> bg-danger
+                            <% } else { %> bg-secondary <% } %>">
+                            <%= t.at_status %>
+                          </span>
+                        </td>
+                        <td><%= t.total_items %></td>
+                        <td><%= new Date(t.transfer_date).toLocaleDateString('th-TH') %></td>
+                        <td class="text-end">
+                          <a href="/transfer_detail/<%= t.transfer_number %>" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-search me-1"></i> ดูรายละเอียด
+                          </a>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  <% } else { %>
+                    <tr>
+                      <td colspan="8" class="text-center text-muted py-4">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td>
+                    </tr>
+                  <% } %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
-  <!-- End main-container -->
-
-
-  <script>
-    function approveRequest(req_id, action) {
-      const admin_comment = prompt("กรอกเหตุผล (ถ้ามี):");
-      if (admin_comment === null) return; // ถ้ายกเลิก
-    
-      fetch(`/api/asset_requests/${req_id}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, admin_comment })
-      })
-      .then(res => res.json())
-      .then(data => {
-        alert(data.message || "Updated");
-        // โหลดหน้าใหม่ หรืออัปเดต UI
-        window.location.reload();
-      })
-      .catch(err => console.error(err));
-    }
-
-    <!-- สคริปต์ -->
-    // แสดงฟอร์มโอนทรัพย์สินเมื่อคลิกปุ่ม
-    const transferBtn = document.getElementById('transferBtn');
-    const transferFormContainer = document.getElementById('transferFormContainer');
-
-    if (transferBtn) {
-      transferBtn.addEventListener('click', () => {
-        transferFormContainer.style.display = 'block';
-      });
-    }
-
-    // เมื่อ submit ฟอร์มโอน
-    document.getElementById('transferForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-
-      const req_asset_id = document.getElementById('req_asset_id').value.trim();
-      const as_asset_number = document.getElementById('as_asset_number').value.trim();
-      const reason = document.getElementById('reason').value.trim();
-
-      // เรียก API /api/asset_transfers
-      fetch('/api/asset_transfers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ req_asset_id, as_asset_number, reason })
-      })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error('Error transferring asset');
-        }
-        return res.json();
-      })
-      .then(data => {
-        alert(data.message || 'Transfer completed');
-        // ซ่อนฟอร์มโอนอีกครั้ง
-        transferFormContainer.style.display = 'none';
-        // รีเซ็ตฟอร์มหรือรีโหลดหน้าตามต้องการ
-      })
-      .catch(err => {
-        console.error(err);
-        alert('Error: ' + err.message);
-      });
-    });
-
-    </script>
-    
-  <!-- jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-  <!-- Script.js (ถ้ามี) -->
-  <script src="/script.js"></script>
 </body>
 </html>

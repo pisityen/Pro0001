@@ -237,6 +237,10 @@ const userRoutes = require('./routes/userRoutes'); // เส้นทางไ�
 app.use('/', userRoutes); 
 const transferRoutes = require('./routes/transferRoutes'); // สมมติแยก
 app.use('/', transferRoutes); 
+const requestRoutes = require('./routes/requestRoutes'); // สมมติแยก
+app.use('/', requestRoutes); 
+const returnRoutes = require('./routes/returnRoutes'); // สมมติแยก
+app.use('/', returnRoutes); 
 
 
 
@@ -419,34 +423,75 @@ app.get('/asset_management',isAdmin, ifNotLoggedIn, (req, res) => {
     });
 });
 
-app.get('/asset_requests', ifNotLoggedIn, (req, res) => {
-  const role = req.session.role;       // ดึง role จาก session
-  const userID = req.session.userID;  // ดึง user_id จาก session (ต้องมั่นใจว่ามีเก็บหลังล็อกอิน)
+app.get('/asset_requests', ifNotLoggedIn, async (req, res) => {
+  try {
+    const role = req.session.role;
+    const userId = req.session.userID;
 
-  let sql = "";
-  let params = [];
-  
-  if (role === 'admin') {
-    // admin เห็นทั้งหมด
-    sql = "SELECT * FROM asset_requests";
-  } else {
-    // user เห็นเฉพาะของตัวเอง
-    sql = "SELECT * FROM asset_requests WHERE req_user_id = ?";
-    params = [userID]
-  }
-  
-  dbconnection.execute(sql, params)  // <-- ตรงนี้ใช้ params ไม่ต้องใส่ [params]
-    .then(([rows]) => {
-      res.render('asset_requests.EJS', { 
-        assets: rows,
-        user_name: req.session.user_name,
-        role: req.session.role
-      });
-    })
-    .catch(err => {
-      console.error(err);
-      res.status(500).send('Database error');
+    // ดึงค่าจากฟอร์มค้นหา (query parameters)
+    const { search, status, startDate, endDate } = req.query;
+
+    let params = [];
+    let whereConditions = [];
+
+    // --- ส่วนของ User ---
+    // User จะเห็นเฉพาะใบเบิกของตัวเอง
+    if (role !== 'admin') {
+      whereConditions.push(`ar.req_user_id = ?`);
+      params.push(userId);
+    }
+
+    // --- สร้างเงื่อนไขการกรองแบบไดนามิก ---
+    if (search) {
+      // ค้นหาจากเลขที่ใบเบิก หรือ ชื่อผู้ใช้
+      whereConditions.push(`(ar.req_asset_id LIKE ? OR ar.req_user_name LIKE ?)`);
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    if (status) {
+      whereConditions.push(`ar.req_status = ?`);
+      params.push(status);
+    }
+    if (startDate) {
+      whereConditions.push(`DATE(ar.req_request_date) >= ?`);
+      params.push(startDate);
+    }
+    if (endDate) {
+      whereConditions.push(`DATE(ar.req_request_date) <= ?`);
+      params.push(endDate);
+    }
+
+    // --- สร้าง SQL Query ---
+    let sqlQuery = `
+      SELECT 
+        ar.req_asset_id,
+        ar.req_user_name,
+        ar.req_reason,
+        ar.req_status,
+        ar.req_request_date,
+        (SELECT COUNT(*) FROM asset_request_items WHERE req_asset_id = ar.req_asset_id) AS total_items
+      FROM asset_requests ar
+    `;
+    
+    if (whereConditions.length > 0) {
+      sqlQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+    }
+    
+    sqlQuery += ` ORDER BY ar.req_id DESC`;
+
+    const [requests] = await dbconnection.execute(sqlQuery, params);
+
+    res.render('asset_requests', { // สร้างไฟล์ใหม่ชื่อ asset_requests.ejs
+      requests: requests,
+      user_name: req.session.user_name,
+      role: req.session.role,
+      // ส่งค่าที่ค้นหาล่าสุดกลับไปที่หน้าเว็บ
+      filters: { search, status, startDate, endDate } 
     });
+
+  } catch (err) {
+    console.error("Error fetching asset requests:", err);
+    res.status(500).send("Database error");
+  }
 });
 
 
@@ -537,7 +582,7 @@ app.post('/api/asset_request_items/:item_id/process', isAdmin, async (req, res) 
     
     await updateRequestStatus(req_asset_id, approver_id, dbconnection);
 
-    res.json({ success: true, message: `รายการ #${item_id} ได้รับการอัปเดตสถานะเป็น ${newItemStatus}` });
+    res.json({ success: true, message: `อัปเดตสถานะเป็น ${newItemStatus}` });
 
   } catch (err) {
     console.error("Error processing item approval:", err);
@@ -545,123 +590,6 @@ app.post('/api/asset_request_items/:item_id/process', isAdmin, async (req, res) 
   }
 });
 
-
-
-
-// **API: สร้างคำขอเบิกของ**
-app.post("/api/asset_requests", /* ifNotLoggedIn, */ async (req, res) => {
-  try {
-
-    function ifNotLoggedInAPI(req, res, next) {
-      if (!req.session.isLoggedIn) {
-        return res.status(401).json({ error: 'Please login first' });
-      }
-      next();
-    }
-    
-
-    // ดึงข้อมูลจาก body
-    // (หากฝั่ง client ส่งมาเป็น user_id หรือ reason และ items/request_items ให้ปรับตามจริง)
-    const { user_id, user_name, reason, request_items } = req.body;
-
-    // ตรวจสอบความถูกต้องของข้อมูล
-    if (!user_id || !user_name || !reason || !Array.isArray(request_items) || request_items.length === 0) {
-      console.error("Invalid input data:", req.body);
-      return res.status(400).json({ error: "Invalid input data" });
-    }
-
-    // สร้าง req_asset_id ใหม่จากรายการล่าสุด
-    const [rows] = await dbconnection.execute(
-      "SELECT req_asset_id FROM asset_requests ORDER BY req_id DESC LIMIT 1"
-    );
-    let newReqId;
-    if (rows.length > 0) {
-      const lastNumber = parseInt(rows[0].req_asset_id.replace('AR', ''), 10);
-      newReqId = `AR${String(lastNumber + 1).padStart(5, '0')}`;
-    } else {
-      newReqId = 'AR00001';
-    }
-
-    // วันที่ปัจจุบัน
-    const now = new Date();
-
-    // INSERT ลงในตาราง asset_requests
-    await dbconnection.execute(
-      `INSERT INTO asset_requests 
-        (req_asset_id, req_user_name, req_user_id, req_request_date, req_status, req_reason, req_admin_comment, req_updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        newReqId,         // req_asset_id
-        user_name,        // req_user_name
-        user_id,          // req_user_id
-        now,              // req_request_date
-        'Pending',        // req_status
-        reason,           // req_reason
-        null,             // req_admin_comment (ใส่ null ไว้ก่อน หรือจะส่งจาก client ก็ได้)
-        now               // req_updated_at
-      ]
-    );
-
-    // INSERT ลงในตาราง asset_request_items (ถ้ามี)
-    // สมมติคอลัมน์: item_id (PK), req_asset_id, item_name, item_quantity, item_status, item_updated_at
-    for (const item of request_items) {
-      if (!item.item_name || !item.item_quantity) {
-        console.warn("Skipping invalid item:", item);
-        continue;
-      }
-
-      await dbconnection.execute(
-        `INSERT INTO asset_request_items 
-          (req_asset_id, item_name, item_quantity, item_status, item_updated_at) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [
-          newReqId,           // ผูกกับ req_asset_id เดียวกัน
-          item.item_name,
-          item.item_quantity,
-          'Pending',          // เริ่มต้นเป็น Pending
-          now
-        ]
-      );
-    }
-
-    return res.status(201).json({
-      message: "Request submitted successfully",
-      req_asset_id: newReqId
-    });
-
-  } catch (err) {
-    console.error("Database error:", err);
-    return res.status(500).json({ error: "Database error" });
-  }
-});
-
-
-
-
-
-
-
-
-
-
-
-app.get("/api/asset_requests", async (req, res) => {
-  try {
-    const [requests] = await db.execute(
-      "SELECT ar.id, ar.user_id, ar.reason, ar.status, ar.request_date, GROUP_CONCAT(ari.item_name, ' (', ari.item_quantity, ')') AS items FROM asset_requests ar JOIN asset_request_items ari ON ar.id = ari.request_id GROUP BY ar.id"
-    );
-
-    res.render('asset_transfers', {
-      user_name: req.session.user_name,
-      role: req.session.role
-    });
-
-    res.json(requests);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
 
 // **แสดงหน้าเว็บฟอร์มเบิกของ**
 app.get("/asset_requests", async (req, res) => {

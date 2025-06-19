@@ -1,208 +1,190 @@
 <!DOCTYPE html>
 <html lang="th">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ฟอร์มคำขอทรัพย์สิน</title>
-  <link rel="stylesheet" href="/css/styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IT Support - Create Request</title>
+  <link rel="stylesheet" href="/css/bar.css" />
+  <link rel="stylesheet" href="/css/styles.css" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- ใส่ไว้ใน <head> หรือท้าย <body> ก็ได้ -->
-  <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
-
 <body>
-  <div class="">
-    <div class="main-container d-flex">
-      <!-- Sidebar -->
-      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
-        <!-- ส่วนเนื้อหาใน Sidebar -->
+  <div class="main-container d-flex">
+    <!-- Sidebar (โค้ดเดิม) -->
+    <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
         <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
-          <h1 class="fs-5 text-uppercase">
-            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
-            <span class="text-white">Management</span>
-          </h1>
+            <h1 class="fs-5 text-uppercase">
+                <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+                <span class="text-white">Management</span>
+            </h1>
         </div>
         <ul class="list-unstyled px-2">
-          <li class="mb-2">
-          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
-          </li>
-          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
-          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
-          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
-            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
+            <% if (role === 'admin') { %>
+                <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white">Dashboard</a></li>
+                <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลทรัพย์สิน</a></li>
+            <% } %>
+            <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
+            <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white">โอนทรัพย์สิน</a></li>
+            <% if (role === 'admin') { %>
+                <li class="mb-2"><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลผู้ใช้งาน</a></li>
+            <% } %>
         </ul>
         <div class="mt-auto px-2 pb-3 text-center">
-          <div class="text-white mb-2">
-            User : <%= user_name %>
-          </div>
-          <div class="text-white mb-2">
-            Role : <%= role %>
-          </div>
-          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
-            <i class="fas fa-sign-out-alt me-2"></i> Logout
-          </a>
+            <div class="text-white mb-2">User : <%= user_name %></div>
+            <div class="text-white mb-2">Role : <%= role %></div>
+            <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
         </div>
-      </div>
-  
-        <!-- //หน้าจอหลัก// -->
-      <div class="container mt-4">
-        <h2>ฟอร์มคำขอทรัพย์สิน</h2>
-        <form id="assetRequestForm">
-          <div class="mb-3">
-            <label for="userName" class="form-label">รหัสผู้เบิก:</label>
-            <input type="text" id="userID" class="form-control" value="<%= user_id %>" readonly>
-          </div>
-          <div class="mb-3">
-            <label for="userName" class="form-label">ชื่อผู้เบิก:</label>
-            <input type="text" id="userName" class="form-control" value="<%= user_name %>" readonly>
-          </div>
-          <div class="mb-3">
-            <label for="reason" class="form-label">เหตุผล:</label>
-            <textarea id="reason" class="form-control" rows="3" required></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">รายการทรัพย์สิน:</label>
-            <div id="itemsContainer">
-              <div class="d-flex mb-2 align-items-center">
-                <!-- <input type="text" class="form-control me-2" placeholder="ชื่อรายการ" required> -->
-                <select class="form-control me-2" required >
-                  <option value="">เลือกประเภท Asset</option>
-                  <option value="Notebook">Notebook</option>
-                  <option value="Pc">PC</option>
-                  <option value="Printer">Printer</option>
-                  <option value="Smartphone">Smartphone</option>
-                </select>
-                <input type="number" class="form-control me-2" placeholder="จำนวน" min="1" required>
-                <button type="button" class="btn btn-danger btn-sm remove-item" onclick="removeItem(this)">ลบ</button>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="content flex-grow-1 p-4 bg-light">
+      <div class="container-fluid">
+        <h3><i class="fas fa-plus-circle me-2"></i> สร้างใบเบิกทรัพย์สินใหม่</h3>
+        <p>กรุณากรอกข้อมูลและเพิ่มรายการที่ต้องการเบิก</p>
+        
+        <form id="createRequestForm">
+          <div class="card shadow-sm">
+            <div class="card-body">
+              <div class="mb-3">
+                <label for="reason" class="form-label">เหตุผลการเบิก</label>
+                <textarea id="reason" name="reason" class="form-control" rows="3" placeholder="เช่น สำหรับพนักงานใหม่, โปรเจค XYZ" required></textarea>
               </div>
+
+              <hr>
+
+              <h5><i class="fas fa-list-alt me-2"></i> รายการที่ต้องการเบิก</h5>
+              <div id="items-container">
+                <!-- รายการจะถูกเพิ่มที่นี่โดย JavaScript -->
+              </div>
+
+              <button type="button" id="addItemBtn" class="btn btn-outline-secondary mt-2">
+                <i class="fas fa-plus me-1"></i> เพิ่มรายการ
+              </button>
             </div>
-            <button type="button" id="addItem" class="btn btn-secondary btn-sm">เพิ่มรายการ</button>
+            <div class="card-footer text-end">
+                <a href="/asset_requests" class="btn btn-secondary">ยกเลิก</a>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-paper-plane me-2"></i> ส่งใบเบิก</button>
+            </div>
           </div>
-          <button type="submit" class="btn btn-primary">ส่งคำขอ</button>
-          <a href="/asset_requests" class="btn btn-secondary">Back to All Requests</a>
         </form>
       </div>
     </div>
   </div>
 
   <script>
-    // ฟังก์ชันลบแถวรายการ โดยลบได้เฉพาะเมื่อมีมากกว่า 1 แถว
-    function removeItem(btn) {
-      const container = document.getElementById("itemsContainer");
-      if (container.querySelectorAll(".d-flex").length > 1) {
-        btn.parentElement.remove();
-      } else {
-        Swal.fire({
-              icon: 'warning',               // ไอคอน เช่น 'success', 'error', 'warning'
-              title: 'ไม่สำเร็จ!',
-              text: 'ต้องมีอย่างน้อย 1 รายการ',
-              confirmButtonText: 'ตกลง'
-            });
-      }
-    }
+    document.addEventListener('DOMContentLoaded', function () {
+      const itemsContainer = document.getElementById('items-container');
+      const addItemBtn = document.getElementById('addItemBtn');
+      const form = document.getElementById('createRequestForm');
+      const categories = <%- JSON.stringify(locals.categories || []) %>;
 
-    document.addEventListener("DOMContentLoaded", function () {
-      const addItemBtn = document.getElementById("addItem");
-      const itemsContainer = document.getElementById("itemsContainer");
+      const updateDropdowns = () => {
+        const selects = document.querySelectorAll('select[name="item_name"]');
+        const selectedValues = [];
+        selects.forEach(select => {
+          if (select.value) {
+            selectedValues.push(select.value);
+          }
+        });
+        
+        selects.forEach(select => {
+          const currentSelection = select.value;
+          select.querySelectorAll('option').forEach(option => {
+            if (option.value === "") { // *** จุดที่แก้ไข: ไม่ปิดการใช้งาน option แรก ***
+                option.disabled = false;
+                return;
+            }
+            if (selectedValues.includes(option.value) && option.value !== currentSelection) {
+              option.disabled = true;
+            } else {
+              option.disabled = false;
+            }
+          });
+        });
+      };
 
-      // เพิ่มแถวรายการใหม่
-      addItemBtn.addEventListener("click", function () {
-        const itemRow = document.createElement("div");
-        itemRow.classList.add("d-flex", "mb-2", "align-items-center");
+      const createItemRow = () => {
+        const rowId = `item-row-${Date.now()}`;
+        const itemRow = document.createElement('div');
+        itemRow.className = 'row g-2 mb-2 align-items-center item-row';
+        itemRow.id = rowId;
+
+        let optionsHtml = '';
+        categories.forEach(cat => {
+          optionsHtml += `<option value="${cat.as_category}">${cat.as_category}</option>`;
+        });
+
         itemRow.innerHTML = `
-          <select class="form-control me-2" required >
-                  <option value="">เลือกประเภท Asset</option>
-                  <option value="Notebook">Notebook</option>
-                  <option value="Pc">PC</option>
-                  <option value="Printer">Printer</option>
-                  <option value="Smartphone">Smartphone</option>
-                </select>
-          <input type="number" class="form-control me-2" placeholder="จำนวน" min="1" required>
-          <button type="button" class="btn btn-danger btn-sm remove-item" onclick="removeItem(this)">ลบ</button>
+          <div class="col-md-6">
+            <select name="item_name" class="form-select" required>
+              <option value="" disabled selected>-- เลือกประเภททรัพย์สิน --</option>
+              ${optionsHtml}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <input type="number" name="item_quantity" class="form-control" placeholder="จำนวน" min="1" required>
+          </div>
+          <div class="col-md-2">
+            <button type="button" class="btn btn-danger w-100 remove-item-btn">&times;</button>
+          </div>
         `;
+        
+        itemRow.querySelector('.remove-item-btn').addEventListener('click', () => {
+          itemRow.remove();
+          updateDropdowns();
+        });
+
+        itemRow.querySelector('select[name="item_name"]').addEventListener('change', updateDropdowns);
+
         itemsContainer.appendChild(itemRow);
-      });
+        updateDropdowns();
+      };
 
-      // เมื่อฟอร์มถูกส่ง
-      document.getElementById("assetRequestForm").addEventListener("submit", function (e) {
+      addItemBtn.addEventListener('click', createItemRow);
+      createItemRow();
+
+      form.addEventListener('submit', function (e) {
         e.preventDefault();
+        
+        const reason = document.getElementById('reason').value.trim();
+        const itemRows = document.querySelectorAll('.item-row');
+        
+        const items = [];
+        itemRows.forEach(row => {
+          const name = row.querySelector('select[name="item_name"]').value;
+          const quantity = row.querySelector('input[name="item_quantity"]').value;
+          if (name && quantity) {
+            items.push({ name, quantity });
+          }
+        });
 
-        // ดึงค่าจากฟอร์ม
-        const userID = document.getElementById("userID").value.trim();
-        const userName = document.getElementById("userName").value.trim();
-        const reason = document.getElementById("reason").value.trim();
-        const itemRows = itemsContainer.querySelectorAll(".d-flex");
-        const items = Array.from(itemRows).map(row => ({
-          item_name: row.children[0].value.trim(),
-          item_quantity: parseInt(row.children[1].value, 10)
-        }));
-
-        // ตรวจสอบข้อมูลให้ครบถ้วน
-        if (!userID || !userName || !reason || items.length === 0 || items.some(item => !item.item_name || isNaN(item.item_quantity) || item.item_quantity <= 0)) {
-          alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+        if (items.length === 0) {
+          Swal.fire('ผิดพลาด', 'กรุณาเพิ่มรายการที่ต้องการเบิกอย่างน้อย 1 รายการ', 'warning');
           return;
         }
 
-        // ตรวจสอบข้อมูลใน console (สำหรับ debug)
-        console.log({
-          user_id: userID,
-          user_name: userName,
-          reason: reason,
-          request_items: items
-        });
-
-        // ส่งข้อมูลไปยัง API โดยใช้ key ให้ตรงกับที่ API คาดหวัง
-        fetch("/api/asset_requests", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userID,
-            user_name: userName,
-            reason: reason,
-            request_items: items
-          })
+        fetch('/create_request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason, items })
         })
-          .then(response => {
-            if (!response.ok) {
-              return response.json().then(errData => {
-                throw new Error(errData.error || "เกิดข้อผิดพลาดในการส่งคำขอ");
-              });
-            }
-            return response.json();
-          })
-          .then(data => {
-            Swal.fire({
-              icon: 'success',               // ไอคอน เช่น 'success', 'error', 'warning'
-              title: 'สำเร็จ!',
-              text: 'ส่งคำขอเรียบร้อยแล้ว',
-              confirmButtonText: 'ตกลง'
-            });
-            document.getElementById("assetRequestForm").reset();
-            // รีเซ็ตรายการให้เหลือแถวเริ่มต้นเดียว
-            itemsContainer.innerHTML = `
-            <div class="d-flex mb-2 align-items-center">
-              <select class="form-control me-2" required >
-                  <option value="">เลือกประเภท Asset</option>
-                  <option value="Notebook">Notebook</option>
-                  <option value="Pc">PC</option>
-                  <option value="Printer">Printer</option>
-                  <option value="Smartphone">Smartphone</option>
-                </select>
-                <input type="number" class="form-control me-2" placeholder="จำนวน" min="1" required>
-                <button type="button" class="btn btn-danger btn-sm remove-item" onclick="removeItem(this)">ลบ</button>
-            </div>
-          `;
-          })
-          .catch(err => {
-            console.error(err);
-            alert("เกิดข้อผิดพลาด: " + err.message);
-          });
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire('สำเร็จ!', data.message, 'success')
+              .then(() => window.location.href = '/asset_requests');
+          } else {
+            throw new Error(data.message || 'เกิดข้อผิดพลาด');
+          }
+        })
+        .catch(err => {
+          Swal.fire('เกิดข้อผิดพลาด', err.message, 'error');
+        });
       });
     });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
 
+</body>
 </html>
