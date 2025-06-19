@@ -10,12 +10,12 @@ const QRCode = require('qrcode');
 // จากนั้นค่อยประกาศ route ต่าง ๆ
 
 // Middleware
-const isAdmin = (req, res, next) => {
-  if (!req.session.isLoggedIn || req.session.role !== 'admin') {
-    return res.status(403).send('Access denied. Admins only.');
-  }
-  next();
-};
+function isAdmin(req, res, next) {
+    if (req.session && req.session.role === 'admin') {
+        return next();
+    }
+    res.status(403).render('error', { message: 'Access Denied' }); // หรือ redirect
+}
 
 function ifNotLoggedIn(req, res, next) {
   // ถ้าไม่มี session userID → ยังไม่ล็อกอิน
@@ -57,11 +57,80 @@ router.post('/asset_management', isAdmin, (req, res) => {
     
 });
 
-// ดึงข้อมูลทรัพย์สินทั้งหมด (Admin เท่านั้น)
-router.get('/asset_management', isAdmin, (req, res) => {
-  dbconnection.execute("SELECT * FROM assets")
-    .then(([rows]) => res.json(rows))
-    .catch(err => res.status(500).json({ error: err.message }));
+// ==========================================================
+//     Route สำหรับแสดงหน้า "จัดการทรัพย์สิน" (พร้อมระบบกรองและ DEBUG)
+// ==========================================================
+router.get('/asset_management', isAdmin, async (req, res) => {
+    try {
+        // --- DEBUG: แสดงค่าทั้งหมดที่ได้รับจาก Query String ---
+        console.log("\n--- DEBUG: Received query parameters ---");
+        console.log(req.query);
+        console.log("------------------------------------");
+
+        // ดึงค่าจากฟอร์มค้นหา (query parameters)
+        const { assetNumber, assetName, assetCategory, serialNumber, location, status } = req.query;
+
+        let params = [];
+        let whereConditions = [];
+
+        // สร้างเงื่อนไขการกรองแบบไดนามิก
+        if (assetNumber) {
+            whereConditions.push(`as_asset_number LIKE ?`);
+            params.push(`%${assetNumber}%`);
+        }
+        if (assetName) {
+            whereConditions.push(`as_name LIKE ?`);
+            params.push(`%${assetName}%`);
+        }
+        if (assetCategory) {
+            whereConditions.push(`as_category LIKE ?`);
+            params.push(`%${assetCategory}%`);
+        }
+        if (serialNumber) {
+            whereConditions.push(`as_serial_number LIKE ?`);
+            params.push(`%${serialNumber}%`);
+        }
+        if (location) {
+            if (location.toLowerCase() === 'in_stock') {
+                whereConditions.push(`as_location IS NULL`);
+            } else {
+                whereConditions.push(`as_location LIKE ?`);
+                params.push(`%${location}%`);
+            }
+        }
+        if (status) {
+            whereConditions.push(`as_status = ?`);
+            params.push(status);
+        }
+
+        // --- สร้าง SQL Query ---
+        let sqlQuery = `SELECT * FROM assets`;
+        
+        if (whereConditions.length > 0) {
+            sqlQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+        }
+        
+        sqlQuery += ` ORDER BY as_id DESC`;
+
+        // --- DEBUG: แสดงคำสั่ง SQL และ Parameters สุดท้ายก่อนรัน ---
+        console.log("\n--- DEBUG: Final SQL Query ---");
+        console.log("SQL:", sqlQuery);
+        console.log("Params:", params);
+        console.log("----------------------------\n");
+
+        const [assets] = await dbconnection.execute(sqlQuery, params);
+
+        res.render('asset_management', { // ตรวจสอบว่ามีไฟล์ asset_management.ejs
+            assets: assets,
+            user_name: req.session.user_name,
+            role: req.session.role,
+            filters: { assetNumber, assetName, assetCategory, serialNumber, location, status }
+        });
+
+    } catch (err) {
+        console.error("Error fetching assets:", err);
+        res.status(500).send("Database error");
+    }
 });
 
 
@@ -114,96 +183,188 @@ router.get('/asset_management/admin', isAdmin, (req, res) => {
 });
 
 
-// Route สำหรับ Create
-router.get('/create', ifNotLoggedIn, (req, res) => {
-  res.render('create_asset', {
-    role: req.session.role,
-    user_name: req.session.user_name,
-    successMsg: ''
-  });
-});
-
-
-
-router.post('/create', ifNotLoggedIn, async (req, res) => {
-  const { name, category, serial_number } = req.body;
-
+// ==========================================================
+//     Route สำหรับแสดงหน้าฟอร์ม "เพิ่มทรัพย์สิน"
+// ==========================================================
+router.get('/create', ifNotLoggedIn, isAdmin, async (req, res) => {
   try {
-    
-    // ดึง asset_number ล่าสุด
-    const [rows] = await dbconnection.execute(
-      "SELECT as_asset_number FROM assets ORDER BY as_id DESC LIMIT 1"
+    // ดึงรายการประเภททรัพย์สินทั้งหมดที่มีอยู่ เพื่อใช้สร้าง Datalist
+    const [categories] = await dbconnection.execute(
+        "SELECT DISTINCT as_category FROM assets WHERE as_category IS NOT NULL AND as_category != '' ORDER BY as_category ASC"
     );
 
-    let newAssetNumber;
-
-    if (rows.length > 0) {
-      // แยกเลขที่อยู่ท้ายสุดของ asset_number เช่น AS00001 -> 1
-      const lastNumber = parseInt(rows[0].as_asset_number.replace('AS', ''), 10);
-      newAssetNumber = `AS${String(lastNumber + 1).padStart(5, '0')}`; // เพิ่มเลข และเติม 0 ให้ครบ 5 ตัว
-    } else {
-      // ถ้าไม่มี record ในฐานข้อมูล ให้เริ่มที่ AS00001
-      newAssetNumber = 'AS00001';
-    }
-
-    
-
-    // เพิ่ม Asset ลงในฐานข้อมูล
-    await dbconnection.execute(
-      "INSERT INTO assets (as_name, as_category, as_serial_number, as_asset_number) VALUES (?, ?, ?, ?)",
-      [name, category, serial_number, newAssetNumber]
-    );
-
-    
-    return res.render('create_asset', {
-      successicon: 'success',
-      successtitle: 'สำเร็จ!',
-      successMsg: 'เพิ่มทรัพย์สินเรียบร้อยแล้ว!',
-      successButton: 'ตกลง!',
-      // ถ้าต้องการส่ง role, user_name, หรือค่าอื่นด้วย
-      role: req.session.role,
-      user_name: req.session.user_name
+    res.render('create_asset', { // ตรวจสอบว่าชื่อไฟล์ EJS ของคุณคือ create_asset.ejs
+        categories: categories, 
+        user_name: req.session.user_name,
+        role: req.session.role
     });
-    
   } catch (err) {
-    if (err.code === 'ER_DUP_ENTRY') {
-      // ส่งค่า errorMsg หรือ errorFlag กลับไป
-      return res.render('create_asset', {
-        successicon: 'warning',
-        successtitle: 'ไม่สำเร็จ!',
-        successMsg: 'Serial number ซ้ำ!',
-        successButton: 'ตกลง!',
-        role: req.session.role,
-        user_name: req.session.user_name
-        // อื่น ๆ
-      });
-    }
-    res.status(500).send('Database error');
+    console.error("Error fetching categories for create asset page:", err);
+    res.status(500).send("Database Error");
   }
 });
 
 
-// router.get('/print_qr/:as_number', async (req, res) => {
-//   const { as_number } = req.params;
+// ==========================================================
+//     Route สำหรับ "บันทึก" ทรัพย์สินใหม่ (ฉบับอัปเกรด)
+// ==========================================================
+router.post('/api/assets/create', ifNotLoggedIn, isAdmin, async (req, res) => {
+  // รับข้อมูลทั้งหมดจากฟอร์ม
+  const { 
+    name, category, serial_number, 
+    purchase_date, purchase_price, supplier, warranty_expiry, notes 
+  } = req.body;
 
-//   try {
-//     const [rows] = await dbconnection.execute(
-//       "SELECT * FROM assets WHERE as_asset_number = ?", 
-//       [as_number]
-//     );
+  // --- Validation (ส่วนที่จำเป็น) ---
+  if (!name || !category || !serial_number) {
+    return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูล ชื่อ, ประเภท, และ Serial Number' });
+  }
 
-//     if (rows.length === 0) return res.status(404).send("Asset not found");
+  try {
+    // 1. สร้างเลขที่ทรัพย์สินใหม่ (ASxxxxx)
+    const [rows] = await dbconnection.execute(
+      "SELECT as_asset_number FROM assets ORDER BY as_id DESC LIMIT 1"
+    );
+    let newAssetNumber;
+    if (rows.length > 0) {
+      const lastNumber = parseInt(rows[0].as_asset_number.replace('AS', ''), 10);
+      newAssetNumber = `AS${String(lastNumber + 1).padStart(5, '0')}`;
+    } else {
+      newAssetNumber = 'AS00001';
+    }
 
-//     const asset = rows[0];
-//     const qrDataURL = await QRCode.toDataURL(as_number); // สร้าง QR จากเลขทรัพย์สิน
+    // 2. เตรียมข้อมูลทั้งหมดสำหรับ INSERT (จัดการกับค่าที่อาจเป็น NULL)
+    const params = [
+        name,
+        category.toLowerCase(), // บันทึกเป็นตัวพิมพ์เล็กเสมอ
+        serial_number,
+        newAssetNumber,
+        'active', // สถานะเริ่มต้น
+        purchase_date || null,
+        purchase_price || null,
+        supplier || null,
+        warranty_expiry || null,
+        notes || null
+    ];
 
-//     res.render('print_qr', { asset, qrDataURL });
+    // 3. เพิ่ม Asset ลงในฐานข้อมูล
+    await dbconnection.execute(
+      `INSERT INTO assets 
+       (as_name, as_category, as_serial_number, as_asset_number, as_status, 
+        as_purchase_date, as_purchase_price, as_supplier, as_warranty_expiry, as_notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      params
+    );
 
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).send('Server error');
-//   }
-// });
+    res.status(201).json({ 
+        success: true, 
+        message: `เพิ่มทรัพย์สินหมายเลข ${newAssetNumber} สำเร็จ!` 
+    });
+    
+  } catch (err) {
+    // จัดการกรณี Serial Number ซ้ำ
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ success: false, message: 'Serial Number นี้มีอยู่ในระบบแล้ว' });
+    }
+    console.error("Error creating asset:", err);
+    res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
+  }
+});
+
+
+// ==========================================================
+//     Route สำหรับแสดงหน้าฟอร์ม "เพิ่มทรัพย์สินเป็นชุด"
+// ==========================================================
+router.get('/assets/create_bulk', ifNotLoggedIn, isAdmin, async (req, res) => {
+    try {
+        const [categories] = await dbconnection.execute(
+            "SELECT DISTINCT as_category FROM assets WHERE as_category IS NOT NULL AND as_category != '' ORDER BY as_category ASC"
+        );
+        res.render('create_asset_bulk', { // ใช้ไฟล์ ejs ใหม่ที่เราสร้าง
+            categories: categories,
+            user_name: req.session.user_name,
+            role: req.session.role
+        });
+    } catch (err) {
+        console.error("Error fetching categories:", err);
+        res.status(500).send("Database Error");
+    }
+});
+
+
+// ==========================================================
+//     Route สำหรับ "บันทึก" ทรัพย์สินเป็นชุด (Bulk)
+// ==========================================================
+router.post('/api/assets/create_bulk', ifNotLoggedIn, isAdmin, async (req, res) => {
+    const { 
+        name, category, serial_numbers,
+        purchase_date, purchase_price, supplier, warranty_expiry
+    } = req.body;
+
+    // --- Validation ---
+    if (!name || !category || !serial_numbers) {
+        return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลหลัก (ชื่อ, ประเภท, Serial Number) ให้ครบ' });
+    }
+
+    // แปลง Textarea เป็น Array ของ Serial Number ที่ไม่ซ้ำและไม่ว่าง
+    const serials = [...new Set(serial_numbers.split('\n').map(s => s.trim()).filter(Boolean))];
+
+    if (serials.length === 0) {
+        return res.status(400).json({ success: false, message: 'ไม่พบ Serial Number ที่ถูกต้องในรายการ' });
+    }
+
+    try {
+        // ตรวจสอบว่ามี Serial Number ใดซ้ำกับในฐานข้อมูลหรือไม่
+        const placeholders = serials.map(() => '?').join(',');
+        const [existingSerials] = await dbconnection.execute(
+            `SELECT as_serial_number FROM assets WHERE as_serial_number IN (${placeholders})`,
+            serials
+        );
+
+        if (existingSerials.length > 0) {
+            const duplicates = existingSerials.map(s => s.as_serial_number).join(', ');
+            return res.status(400).json({ success: false, message: `Serial Number เหล่านี้มีอยู่ในระบบแล้ว: ${duplicates}` });
+        }
+        
+        await dbconnection.beginTransaction();
+        
+        const [lastAsset] = await dbconnection.execute("SELECT as_asset_number FROM assets ORDER BY as_id DESC LIMIT 1");
+        let nextAssetNum = 1;
+        if (lastAsset.length > 0) {
+            nextAssetNum = parseInt(lastAsset[0].as_asset_number.replace('AS', '')) + 1;
+        }
+
+        const assetsToInsert = serials.map((serial, index) => {
+            const newAssetNumber = `AS${String(nextAssetNum + index).padStart(5, '0')}`;
+            return [
+                name, category.toLowerCase(), serial, newAssetNumber, 'active',
+                purchase_date || null, purchase_price || null, supplier || null, warranty_expiry || null
+            ];
+        });
+
+        await dbconnection.query(
+            `INSERT INTO assets 
+             (as_name, as_category, as_serial_number, as_asset_number, as_status, 
+              as_purchase_date, as_purchase_price, as_supplier, as_warranty_expiry) 
+             VALUES ?`,
+            [assetsToInsert]
+        );
+
+        await dbconnection.commit();
+
+        res.status(201).json({ 
+            success: true, 
+            message: `เพิ่มทรัพย์สินใหม่จำนวน <strong>${serials.length}</strong> รายการสำเร็จ!` 
+        });
+
+    } catch (err) {
+        await dbconnection.rollback();
+        console.error("Error during bulk asset creation:", err);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในฝั่งเซิร์ฟเวอร์' });
+    }
+});
+
+
 
 
 router.get('/print_qr', async (req, res) => {
@@ -253,47 +414,102 @@ router.get('/assets/print_qr_select', async (req, res) => {
 
 
 
-// แสดงหน้าแก้ไขข้อมูล
-router.get('/edit/:id', ifNotLoggedIn, async (req, res) => {
-  const assetId = req.params.id;
+// ==========================================================
+//     Route สำหรับ "แสดง" หน้าฟอร์มแก้ไขข้อมูล
+// ==========================================================
+router.get('/assets/edit/:id', ifNotLoggedIn, isAdmin, async (req, res) => {
+    try {
+        const assetId = req.params.id;
 
-  try {
-    // ดึงข้อมูลทรัพย์สินตาม ID
-    const [rows] = await dbconnection.execute(
-      "SELECT * FROM assets WHERE as_id = ?",
-      [assetId]
-    );
+        // 1. ดึงข้อมูลทรัพย์สินตาม ID ที่ต้องการแก้ไข
+        const [assetRows] = await dbconnection.execute(
+            "SELECT * FROM assets WHERE as_id = ?",
+            [assetId]
+        );
 
-    if (rows.length === 0) {
-      return res.status(404).send('Asset not found!');
+        if (assetRows.length === 0) {
+            return res.status(404).send('Asset not found!');
+        }
+        const asset = assetRows[0];
+
+        // 2. ดึงรายการประเภททรัพย์สินทั้งหมดเพื่อสร้าง Dropdown
+        const [categories] = await dbconnection.execute(
+            "SELECT DISTINCT as_category FROM assets WHERE as_category IS NOT NULL AND as_category != '' ORDER BY as_category ASC"
+        );
+        
+        // 3. จัดรูปแบบวันที่ให้อยู่ในฟอร์แมต YYYY-MM-DD เพื่อให้ input type="date" แสดงผลถูกต้อง
+        if (asset.as_purchase_date) {
+            asset.as_purchase_date = new Date(asset.as_purchase_date).toISOString().split('T')[0];
+        }
+        if (asset.as_warranty_expiry) {
+            asset.as_warranty_expiry = new Date(asset.as_warranty_expiry).toISOString().split('T')[0];
+        }
+
+        res.render('edit_asset', {
+            asset: asset,
+            categories: categories,
+            user_name: req.session.user_name,
+            role: req.session.role
+        });
+    } catch (err) {
+        console.error("Error fetching asset for edit:", err);
+        res.status(500).send('Database error');
     }
-
-    res.render('edit_asset', { title: 'Edit Asset', 
-      asset: rows[0], 
-      user_name: req.session.user_name,
-      role: req.session.role});
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Database error');
-  }
 });
 
-// อัปเดตข้อมูลทรัพย์สิน
-router.post('/edit/:id', ifNotLoggedIn, async (req, res) => {
-  const assetId = req.params.id;
-  const { name, category, serial_number } = req.body;
 
-  try {
-    await dbconnection.execute(
-      "UPDATE assets SET as_name = ?, as_category = ?, as_serial_number = ? WHERE as_id = ?",
-      [name, category, serial_number, assetId]
-    );
+// ==========================================================
+//     Route สำหรับ "บันทึก" การแก้ไขข้อมูล
+// ==========================================================
+router.post('/assets/edit/:id', ifNotLoggedIn, isAdmin, async (req, res) => {
+    try {
+        const assetId = req.params.id;
+        // รับข้อมูลทั้งหมดจากฟอร์ม
+        const {
+            name, category, serial_number, status, location,
+            purchase_date, purchase_price, supplier, warranty_expiry, notes
+        } = req.body;
 
-    res.redirect('/asset_management');
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Database error');
-  }
+        // --- Validation (ส่วนที่จำเป็น) ---
+        if (!name || !category || !serial_number || !status) {
+            // ควรมีการส่งข้อความแจ้งเตือนกลับไปที่หน้าฟอร์ม
+            return res.status(400).send('กรุณากรอกข้อมูลที่จำเป็นให้ครบ');
+        }
+
+        // เตรียมข้อมูลสำหรับอัปเดต (จัดการค่าว่างให้เป็น NULL)
+        const params = [
+            name,
+            category.toLowerCase(),
+            serial_number,
+            status,
+            location.trim() === '' ? null : location.trim(), // ถ้า location เป็นค่าว่างให้เก็บเป็น NULL
+            purchase_date || null,
+            purchase_price || null,
+            supplier || null,
+            warranty_expiry || null,
+            notes || null,
+            assetId // as_id สำหรับ WHERE clause
+        ];
+
+        await dbconnection.execute(
+            `UPDATE assets SET 
+                as_name = ?, as_category = ?, as_serial_number = ?, as_status = ?, as_location = ?,
+                as_purchase_date = ?, as_purchase_price = ?, as_supplier = ?, as_warranty_expiry = ?, as_notes = ?
+             WHERE as_id = ?`,
+            params
+        );
+
+        // เมื่อสำเร็จ ให้กลับไปที่หน้าจัดการทรัพย์สิน
+        res.redirect('/asset_management');
+
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+            // ควรมีการส่งข้อความแจ้งเตือนกลับไป
+            return res.status(400).send('Serial Number นี้มีอยู่ในระบบแล้ว');
+        }
+        console.error("Error updating asset:", err);
+        res.status(500).send('Database error');
+    }
 });
 
 
@@ -339,7 +555,22 @@ router.get('/api/assets/:as_number', async (req, res) => {
 });
 
 
-
+// --- API สำหรับสร้าง QR Code (GET) ---
+router.get('/api/qrcode/:as_number', async (req, res) => {
+  try {
+    const asNumber = req.params.as_number;
+    const qr = await QRCode.toDataURL(asNumber, { errorCorrectionLevel: 'H' });
+    const img = Buffer.from(qr.split(',')[1], 'base64');
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Content-Length': img.length
+    });
+    res.end(img);
+  } catch (err) {
+    console.error('QR Code Error:', err);
+    res.status(500).send('Error generating QR');
+  }
+});
 
 
 

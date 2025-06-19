@@ -19,59 +19,6 @@ function isAdmin(req, res, next) {
 
 
 
-// ==========================================================
-//     Route สำหรับ "Admin" ยืนยันการรับของคืน
-// ==========================================================
-router.post('/api/asset_transfers/confirm_return', ifNotLoggedIn, isAdmin, async (req, res) => {
-    const { transfer_number } = req.body;
-
-    if (!transfer_number) {
-        return res.status(400).json({ success: false, message: 'ไม่พบหมายเลขใบโอน' });
-    }
-    
-    // เริ่มต้น Transaction เพื่อความปลอดภัยของข้อมูล
-    try {
-        await dbconnection.beginTransaction();
-        
-        // 1. ดึงรายการทรัพย์สินทั้งหมดในใบโอนคืนนี้ที่ยังเป็น "Pending"
-        const [assetsToReturn] = await dbconnection.execute(
-            "SELECT as_asset_number FROM asset_transfers WHERE transfer_number = ? AND at_status = 'Pending' AND transfer_type = 'return'",
-            [transfer_number]
-        );
-
-        if (assetsToReturn.length === 0) {
-            await dbconnection.rollback();
-            return res.status(404).json({ success: false, message: 'ไม่พบรายการที่รอการรับคืนสำหรับใบโอนนี้' });
-        }
-        
-        // รวบรวมหมายเลขทรัพย์สินทั้งหมด
-        const assetNumbers = assetsToReturn.map(a => a.as_asset_number);
-        const placeholders = assetNumbers.map(() => '?').join(',');
-
-        // 2. อัปเดตสถานะใบโอนคืนเป็น 'Completed'
-        await dbconnection.execute(
-            `UPDATE asset_transfers SET at_status = 'Completed' WHERE transfer_number = ? AND transfer_type = 'return' AND at_status = 'Pending'`,
-            [transfer_number]
-        );
-
-        // 3. (จุดสำคัญ) นำทรัพย์สินกลับเข้าสต็อก (ตั้ง as_location เป็น NULL)
-        await dbconnection.execute(
-            `UPDATE assets SET as_location = NULL WHERE as_asset_number IN (${placeholders})`,
-            assetNumbers
-        );
-
-        // ยืนยัน Transaction ถ้าทุกอย่างสำเร็จ
-        await dbconnection.commit();
-        res.status(200).json({ success: true, message: `ยืนยันการรับคืนสำหรับใบโอน ${transfer_number} สำเร็จ` });
-
-    } catch (err) {
-        // หากเกิดข้อผิดพลาด ให้ยกเลิกการกระทำทั้งหมด
-        await dbconnection.rollback();
-        console.error("Error confirming return:", err);
-        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
-    }
-});
-
 
 router.get('/asset_transfers/:req_asset_id', async (req, res) => {
   try {
@@ -369,8 +316,9 @@ router.get('/transfer_detail/:transfer_number', ifNotLoggedIn, async (req, res) 
 
   
 
-
-// --- API สำหรับ "ยืนยันการรับของทั้งหมด" (ฉบับปรับปรุง) ---
+// ==========================================================
+//     API สำหรับ "User" ยืนยันการรับของทั้งหมด
+// ==========================================================
 router.post('/api/asset_transfers/receive_all', ifNotLoggedIn, async (req, res) => {
     const { transfer_number } = req.body;
     const recipientUserId = req.session.userID;
@@ -380,11 +328,8 @@ router.post('/api/asset_transfers/receive_all', ifNotLoggedIn, async (req, res) 
         return res.status(400).json({ error: 'ไม่พบหมายเลขใบโอน' });
     }
 
-    // เริ่มต้น Transaction
     await dbconnection.beginTransaction();
-
     try {
-        // 1. ดึงข้อมูลใบโอนและใบเบิกที่เกี่ยวข้อง
         const [transfers] = await dbconnection.execute(
             `SELECT t.as_asset_number, t.req_asset_id, r.req_user_id 
              FROM asset_transfers t
@@ -398,7 +343,6 @@ router.post('/api/asset_transfers/receive_all', ifNotLoggedIn, async (req, res) 
             return res.status(404).json({ error: 'ไม่พบรายการที่รอการรับของ' });
         }
 
-        // 2. ตรวจสอบสิทธิ์ว่าผู้กดคือคนเดียวกับผู้ขอ
         const originalRequesterId = transfers[0].req_user_id;
         if (originalRequesterId !== recipientUserId) {
             await dbconnection.rollback();
@@ -409,64 +353,86 @@ router.post('/api/asset_transfers/receive_all', ifNotLoggedIn, async (req, res) 
         const assetNumbersToUpdate = transfers.map(t => t.as_asset_number);
         const placeholders = assetNumbersToUpdate.map(() => '?').join(',');
 
-        // 3. อัปเดต asset_transfers เป็น 'Completed'
         await dbconnection.execute(
             `UPDATE asset_transfers SET at_status = 'Completed' WHERE transfer_number = ? AND at_status = 'Pending'`,
             [transfer_number]
         );
 
-        // 4. อัปเดต assets ให้มี as_location เป็นชื่อผู้รับ
         await dbconnection.execute(
             `UPDATE assets SET as_location = ? WHERE as_asset_number IN (${placeholders})`,
             [recipientUserName, ...assetNumbersToUpdate]
         );
         
-        // *** 5. ส่วนที่เพิ่มเข้ามา: ตรวจสอบและอัปเดตสถานะใบเบิกหลัก (AR) ***
-        // นับจำนวนรายการทั้งหมดที่ "อนุมัติ" ในใบเบิกนี้
         const [[{ total_approved }]] = await dbconnection.execute(
-            `SELECT SUM(item_quantity_approved) as total_approved 
-             FROM asset_request_items 
-             WHERE req_asset_id = ? AND item_status IN ('Approved', 'Partially Approved')`,
+            `SELECT SUM(item_quantity_approved) as total_approved FROM asset_request_items WHERE req_asset_id = ?`,
             [req_asset_id]
         );
-
-        // นับจำนวนรายการทั้งหมดที่ "โอนสำเร็จแล้ว" ในใบเบิกนี้
         const [[{ total_completed }]] = await dbconnection.execute(
-            `SELECT COUNT(*) as total_completed 
-             FROM asset_transfers 
-             WHERE req_asset_id = ? AND at_status = 'Completed'`,
+            `SELECT COUNT(*) as total_completed FROM asset_transfers WHERE req_asset_id = ? AND at_status = 'Completed'`,
             [req_asset_id]
         );
 
-        // *** จุดที่แก้ไข: เพิ่ม LOG เพื่อตรวจสอบค่า ***
-        console.log(`\n--- DEBUGGING AR STATUS UPDATE ---`);
-        console.log(`- AR Number: ${req_asset_id}`);
-        console.log(`- Total Approved Quantity (จาก asset_request_items): ${total_approved}`);
-        console.log(`- Total Completed Transfers (จาก asset_transfers): ${total_completed}`);
-        console.log(`- Condition Check: (${total_approved} > 0 && ${total_approved} == ${total_completed}) -> ${total_approved > 0 && total_approved == total_completed}`);
-        console.log(`---------------------------------\n`);
-
-        // ถ้าจำนวนที่อนุมัติ เท่ากับ จำนวนที่โอนสำเร็จแล้ว -> ใบเบิกนี้เสร็จสมบูรณ์
-        if (total_approved > 0 && total_approved == total_completed) { // ใช้ == เพื่อความยืดหยุ่น
+        if (total_approved > 0 && total_approved == total_completed) {
             await dbconnection.execute(
                 "UPDATE asset_requests SET req_status = 'Completed' WHERE req_asset_id = ?",
                 [req_asset_id]
             );
-            console.log(`SUCCESS: สถานะของ AR# ${req_asset_id} ถูกอัปเดตเป็น 'Completed' เรียบร้อยแล้ว`);
-        } else {
-            console.log(`INFO: สถานะของ AR# ${req_asset_id} จะยังไม่อัปเดตเนื่องจากเงื่อนไขไม่เป็นจริง`);
         }
 
-        // ถ้าทุกอย่างสำเร็จ ให้ Commit
         await dbconnection.commit();
-
         res.status(200).json({ success: true, message: 'ยืนยันการรับของทั้งหมดเรียบร้อยแล้ว' });
 
     } catch (err) {
-        // ถ้าเกิดข้อผิดพลาด ให้ Rollback
         await dbconnection.rollback();
         console.error("Error receiving all assets:", err);
-        res.status(500).json({ error: 'เกิดข้อผิดพลาดในฝั่งเซิร์ฟเวอร์' });
+        res.status(500).json({ error: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
+    }
+});
+
+
+// ==========================================================
+//     API สำหรับ "Admin" ยืนยันการรับของคืน
+// ==========================================================
+router.post('/api/asset_transfers/confirm_return', ifNotLoggedIn, isAdmin, async (req, res) => {
+    const { transfer_number } = req.body;
+
+    if (!transfer_number) {
+        return res.status(400).json({ success: false, message: 'ไม่พบหมายเลขใบโอน' });
+    }
+    
+    try {
+        await dbconnection.beginTransaction();
+        
+        const [assetsToReturn] = await dbconnection.execute(
+            "SELECT as_asset_number FROM asset_transfers WHERE transfer_number = ? AND at_status = 'Pending' AND transfer_type = 'return'",
+            [transfer_number]
+        );
+
+        if (assetsToReturn.length === 0) {
+            await dbconnection.rollback();
+            return res.status(404).json({ success: false, message: 'ไม่พบรายการที่รอการรับคืนสำหรับใบโอนนี้' });
+        }
+        
+        const assetNumbers = assetsToReturn.map(a => a.as_asset_number);
+        const placeholders = assetNumbers.map(() => '?').join(',');
+
+        await dbconnection.execute(
+            `UPDATE asset_transfers SET at_status = 'Completed' WHERE transfer_number = ? AND transfer_type = 'return' AND at_status = 'Pending'`,
+            [transfer_number]
+        );
+
+        await dbconnection.execute(
+            `UPDATE assets SET as_location = NULL WHERE as_asset_number IN (${placeholders})`,
+            assetNumbers
+        );
+
+        await dbconnection.commit();
+        res.status(200).json({ success: true, message: `ยืนยันการรับคืนสำหรับใบโอน ${transfer_number} สำเร็จ` });
+
+    } catch (err) {
+        await dbconnection.rollback();
+        console.error("Error confirming return:", err);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
     }
 });
 

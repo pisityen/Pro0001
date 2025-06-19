@@ -1,115 +1,166 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>IT Support - Add New Asset</title>
     <link rel="stylesheet" href="/css/bar.css" />
     <link rel="stylesheet" href="/css/styles.css" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
 </head>
-
 <body>
-    <div class="main-container">
-      <!-- Sidebar -->
-      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
-        <!-- ส่วนเนื้อหาใน Sidebar -->
-        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
-          <h1 class="fs-5 text-uppercase">
-            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
-            <span class="text-white">Management</span>
-          </h1>
+    <div class="main-container d-flex">
+        <!-- Sidebar (โค้ดเดิม) -->
+        <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+            <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+                <h1 class="fs-5 text-uppercase">
+                    <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+                    <span class="text-white">Management</span>
+                </h1>
+            </div>
+            <ul class="list-unstyled px-2">
+                <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a></li>
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li>
+                <% } %>
+                <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white">เบิกทรัพย์สิน</a></li>
+                <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white">โอนทรัพย์สิน</a></li>
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลผู้ใช้งาน</a></li>
+                <% } %>
+            </ul>
+            <div class="mt-auto px-2 pb-3 text-center">
+                <div class="text-white mb-2">User : <%= user_name %></div>
+                <div class="text-white mb-2">Role : <%= role %></div>
+                <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
+            </div>
         </div>
-        <ul class="list-unstyled px-2">
-          <li class="mb-2">
-          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
-          </li>
-          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
-          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
-          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
-            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
-        </ul>
-        <div class="mt-auto px-2 pb-3 text-center">
-          <div class="text-white mb-2">
-            User : <%= user_name %>
-          </div>
-          <div class="text-white mb-2">
-            Role : <%= role %>
-          </div>
-          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
-            <i class="fas fa-sign-out-alt me-2"></i> Logout
-          </a>
-        </div>
-      </div>
-  
-        <!-- //หน้าจอหลัก// -->
-      
-        <div class="container mt-5">
-            <h1 class="text-center mb-4">Add New Asset</h1>
+    
+        <!-- Main Content -->
+        <div class="content flex-grow-1 p-4 bg-light">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-lg-10">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3><i class="fas fa-plus-circle me-2"></i> เพิ่มทรัพย์สินใหม่เข้าสู่ระบบ</h3>
+                            <a href="/asset_management" class="btn btn-secondary"><i class="fas fa-chevron-left me-2"></i>กลับ</a>
+                        </div>
+                        <div class="card shadow-sm">
+                            <div class="card-body p-4">
+                                <form id="addAssetForm">
+                                    <h5 class="mb-3">ข้อมูลหลัก (บังคับ)</h5>
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="name" class="form-label">ชื่อทรัพย์สิน (Name)</label>
+                                                <input type="text" class="form-control" id="name" name="name" required placeholder="เช่น Dell Latitude 5420 i5/16GB/512GB">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="serial_number" class="form-label">Serial Number</label>
+                                                <input type="text" class="form-control" id="serial_number" name="serial_number" required placeholder="S/N ที่อยู่บนตัวเครื่อง">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="category" class="form-label">ประเภท (Category)</label>
+                                        <input list="category-options" class="form-control" id="category" name="category" required placeholder="เลือกหรือพิมพ์เพื่อสร้างประเภทใหม่...">
+                                        <datalist id="category-options">
+                                            <% if (locals.categories && categories.length > 0) { %>
+                                                <% categories.forEach(cat => { %>
+                                                    <option value="<%= cat.as_category %>">
+                                                <% }) %>
+                                            <% } %>
+                                        </datalist>
+                                    </div>
 
-            <% if (successMsg) { %>
-              <script>
+                                    <hr class="my-4">
+                                    <h5 class="mb-3">ข้อมูลการจัดซื้อ (ไม่บังคับ)</h5>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="purchase_date" class="form-label">วันที่จัดซื้อ</label>
+                                                <input type="date" class="form-control" id="purchase_date" name="purchase_date">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="purchase_price" class="form-label">ราคา (บาท)</label>
+                                                <input type="number" step="0.01" class="form-control" id="purchase_price" name="purchase_price" placeholder="0.00">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="supplier" class="form-label">ซัพพลายเออร์</label>
+                                                <input type="text" class="form-control" id="supplier" name="supplier" placeholder="เช่น J.I.B, Advice">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="warranty_expiry" class="form-label">วันหมดอายุประกัน</label>
+                                        <input type="date" class="form-control" id="warranty_expiry" name="warranty_expiry">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="notes" class="form-label">หมายเหตุเพิ่มเติม</label>
+                                        <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="ระบุรายละเอียดเพิ่มเติม เช่น ตำหนิ, อุปกรณ์เสริมที่มาพร้อมกัน"></textarea>
+                                    </div>
+
+                                    <div class="d-grid gap-2 mt-4">
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-save me-2"></i> บันทึกข้อมูลทรัพย์สิน
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('addAssetForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const form = this;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            fetch('/assets/api/assets/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            })
+            .then(res => res.json().then(json => ({ ok: res.ok, json })))
+            .then(({ ok, json }) => {
+                if (!ok) {
+                    throw new Error(json.message || 'เกิดข้อผิดพลาดในการเพิ่มข้อมูล');
+                }
                 Swal.fire({
-                  icon: '<%= successicon %>',
-                  title: '<%= successtitle %>',
-                  text: '<%= successMsg %>',
-                  confirmButtonText: '<%= successButton %>'
+                    icon: 'success',
+                    title: 'สำเร็จ!',
+                    text: json.message,
+                }).then(() => {
+                    form.reset(); // ล้างฟอร์ม
+                    document.getElementById('name').focus(); // ย้าย cursor ไปที่ช่องแรก
                 });
-              </script>
-            <% } %>
-
-            <form action="/assets/create" method="POST">
-                <!-- Name Field -->
-                <div class="mb-3 row">
-                    <label for="name" class="col-sm-3 col-form-label">Name</label>
-                    <div class="col-sm-9">
-                        <input type="text" class="form-control" id="name" name="name" required
-                            placeholder="Enter asset name">
-                    </div>
-                </div>
-
-                <!-- Category Field -->
-                <div class="mb-3 row">
-                    <label for="category" class="col-sm-3 col-form-label">Category</label>
-                    <div class="col-sm-9">
-                      <select class="form-control me-2" id="category" name="category" required >
-                        <option id="category" name="category" value="">เลือกประเภท Asset</option>
-                        <option id="category" name="category" value="Notebook">Notebook</option>
-                        <option id="category" name="category" value="Pc">PC</option>
-                        <option id="category" name="category" value="Printer">Printer</option>
-                        <option id="category" name="category" value="Smartphone">Smartphone</option>
-                      </select>
-                        <!-- <input type="text" class="form-control" id="category" name="category" required
-                            placeholder="Enter asset category"> -->
-
-                    </div>
-                </div>
-
-                <!-- Serial Number Field -->
-                <div class="mb-3 row">
-                    <label for="serial_number" class="col-sm-3 col-form-label">Serial Number</label>
-                    <div class="col-sm-9">
-                        <input type="text" class="form-control" id="serial_number" name="serial_number" required
-                            placeholder="Enter serial number">
-                    </div>
-                </div>
-
-                <!-- Submit Button -->
-                <div class="d-flex justify-content-center mb-2">
-                    <button type="submit" class="btn btn-success px-4 py-2 mx-2">Add Asset</button>
-                    <a class="btn btn-danger px-4 py-2 text-white mx-2" href="/asset_management">Back to Assets</a>
-                </div>
-
-            </form>
-        </div>
-    </div>c
-
-    <!-- Add Bootstrap 5 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+            })
+            .catch(err => {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'ไม่สำเร็จ',
+                    text: err.message,
+                });
+            });
+        });
+    </script>
 </body>
-
 </html>

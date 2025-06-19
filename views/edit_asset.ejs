@@ -1,93 +1,146 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IT</title>
+    <title>IT Support - Edit Asset</title>
     <link rel="stylesheet" href="/css/bar.css" />
     <link rel="stylesheet" href="/css/styles.css" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-
 <body>
-    <div class="main-container">
-      <!-- Sidebar -->
-      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
-        <!-- ส่วนเนื้อหาใน Sidebar -->
-        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
-          <h1 class="fs-5 text-uppercase">
-            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
-            <span class="text-white">Management</span>
-          </h1>
+    <div class="main-container d-flex">
+        <!-- Sidebar (โค้ดเดิม) -->
+        <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+            <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+                <h1 class="fs-5 text-uppercase">
+                    <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+                    <span class="text-white">Management</span>
+                </h1>
+            </div>
+            <ul class="list-unstyled px-2">
+                <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a></li>
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li>
+                <% } %>
+                <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white">เบิกทรัพย์สิน</a></li>
+                <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white">โอนทรัพย์สิน</a></li>
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลผู้ใช้งาน</a></li>
+                <% } %>
+            </ul>
+            <div class="mt-auto px-2 pb-3 text-center">
+                <div class="text-white mb-2">User : <%= user_name %></div>
+                <div class="text-white mb-2">Role : <%= role %></div>
+                <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
+            </div>
         </div>
-        <ul class="list-unstyled px-2">
-          <li class="mb-2">
-          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
-          </li>
-          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
-          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
-          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
-            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
-        </ul>
-        <div class="mt-auto px-2 pb-3 text-center">
-          <div class="text-white mb-2">
-            User : <%= user_name %>
-          </div>
-          <div class="text-white mb-2">
-            Role : <%= role %>
-          </div>
-          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
-            <i class="fas fa-sign-out-alt me-2"></i> Logout
-          </a>
-        </div>
-      </div>
-  
-        <!-- //หน้าจอหลัก// -->
-      
-        <div class="container mt-5">
-            <h1 class="text-center mb-4">Add New Asset</h1>
-            <form action="/assets/edit/<%= asset.as_id %>" method="POST">
-                <!-- Name Field -->
-                <div class="mb-3 row">
-                    <label for="name" class="col-sm-3 col-form-label">Name</label>
-                    <div class="col-sm-9">
-                        <input type="text" class="form-control" id="name" name="name" value="<%= asset.as_name %>" required>
+    
+        <!-- Main Content -->
+        <div class="content flex-grow-1 p-4 bg-light">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-lg-10">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3><i class="fas fa-pencil-alt me-2"></i> แก้ไขข้อมูลทรัพย์สิน: <%= asset.as_asset_number %></h3>
+                            <a href="/asset_management" class="btn btn-secondary"><i class="fas fa-chevron-left me-2"></i>กลับ</a>
+                        </div>
+                        <div class="card shadow-sm">
+                            <div class="card-body p-4">
+                                <form action="/assets/assets/edit/<%= asset.as_id %>" method="POST">
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="mb-3">
+                                                <label for="name" class="form-label">ชื่อทรัพย์สิน</label>
+                                                <input type="text" class="form-control" id="name" name="name" required value="<%= asset.as_name %>">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="serial_number" class="form-label">Serial Number</label>
+                                                <input type="text" class="form-control" id="serial_number" name="serial_number" required value="<%= asset.as_serial_number %>">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="category" class="form-label">ประเภท</label>
+                                        <input list="category-options" class="form-control" id="category" name="category" required value="<%= asset.as_category %>">
+                                        <datalist id="category-options">
+                                            <% if (locals.categories && categories.length > 0) { %>
+                                                <% categories.forEach(cat => { %>
+                                                    <option value="<%= cat.as_category %>">
+                                                <% }) %>
+                                            <% } %>
+                                        </datalist>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="location" class="form-label">Location</label>
+                                                <input type="text" class="form-control" id="location" name="location" value="<%= asset.as_location || '' %>" placeholder="ปล่อยว่าง ถ้าอยู่ในสต็อก">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="status" class="form-label">สถานะ</label>
+                                                <select class="form-select" id="status" name="status">
+                                                    <option value="active" <%= asset.as_status === 'active' ? 'selected' : '' %>>Active</option>
+                                                    <option value="damaged" <%= asset.as_status === 'damaged' ? 'selected' : '' %>>Damaged</option>
+                                                    <option value="disposed" <%= asset.as_status === 'disposed' ? 'selected' : '' %>>Disposed</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <hr class="my-4">
+                                    <h5 class="mb-3">ข้อมูลการจัดซื้อ</h5>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="purchase_date" class="form-label">วันที่จัดซื้อ</label>
+                                                <input type="date" class="form-control" id="purchase_date" name="purchase_date" value="<%= asset.as_purchase_date %>">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="purchase_price" class="form-label">ราคา (บาท)</label>
+                                                <input type="number" step="0.01" class="form-control" id="purchase_price" name="purchase_price" value="<%= asset.as_purchase_price || '' %>">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label for="supplier" class="form-label">ซัพพลายเออร์</label>
+                                                <input type="text" class="form-control" id="supplier" name="supplier" value="<%= asset.as_supplier || '' %>">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="warranty_expiry" class="form-label">วันหมดอายุประกัน</label>
+                                        <input type="date" class="form-control" id="warranty_expiry" name="warranty_expiry" value="<%= asset.as_warranty_expiry %>">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="notes" class="form-label">หมายเหตุเพิ่มเติม</label>
+                                        <textarea class="form-control" id="notes" name="notes" rows="3"><%= asset.as_notes || '' %></textarea>
+                                    </div>
+
+                                    <div class="d-grid gap-2 mt-4">
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-save me-2"></i> บันทึกการเปลี่ยนแปลง
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Category Field -->
-                <div class="mb-3 row">
-                    <label for="category" class="col-sm-3 col-form-label">Category</label>
-                    <div class="col-sm-9">
-                        <input type="text" class="form-control" id="category" name="category" value="<%= asset.as_category %>" required>
-                    </div>
-                </div>
-
-                <!-- Serial Number Field -->
-                <div class="mb-3 row">
-                    <label for="serial_number" class="col-sm-3 col-form-label">Serial Number</label>
-                    <div class="col-sm-9">
-                        <input type="text" class="form-control" id="serial_number" name="serial_number" value="<%= asset.as_serial_number %>" required>
-                    </div>
-                </div>
-
-                <!-- Submit Button -->
-                <div class="d-flex justify-content-center mb-2">
-                    <button type="submit" class="btn btn-success px-4 py-2">Save</button>
-                </div>
-                <div class="d-flex justify-content-center">
-                    <a class="btn btn-danger px-4 py-2 text-white" href="/asset_management">Back to Assets</a>
-                </div>
-
-            </form>
+            </div>
         </div>
-    </div>c
-
-    <!-- Add Bootstrap 5 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    </div>
 </body>
-
 </html>
-  

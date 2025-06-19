@@ -21,8 +21,8 @@
             </h1>
         </div>
         <ul class="list-unstyled px-2">
+            <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white">Dashboard</a></li>
             <% if (role === 'admin') { %>
-                <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white">Dashboard</a></li>
                 <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลทรัพย์สิน</a></li>
             <% } %>
             <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white">เบิกทรัพย์สิน</a></li>
@@ -43,7 +43,7 @@
       <div class="container mt-4">
         <% if (transferItems && transferItems.length > 0) { %>
           <% const transfer = transferItems[0]; %>
-          <% let isFullyCompleted = transferItems.every(item => item.at_status === 'Completed'); %>
+          <% const isFullyCompleted = transferItems.every(item => item.at_status === 'Completed'); %>
           
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h3><i class="fas fa-box-open me-2"></i> รายละเอียดใบโอน: <%= transfer.transfer_number %></h3>
@@ -54,7 +54,7 @@
             <div class="card-header bg-white">
                 <div class="row">
                     <div class="col-md-6">
-                        <p class="mb-1"><strong>ผู้ดำเนินการ:</strong> <%= transfer.creator_name || 'N/A' %></p>
+                        <p class="mb-1"><strong>ผู้ดำเนินการ:</strong> <%= transfer.creator_name || (transfer.transfer_type === 'Request' ? transfer.req_user_name : 'N/A') %></p>
                         <p class="mb-0 text-muted">อ้างอิงใบเบิก: <%= transfer.req_asset_id || 'ไม่มี (ใบโอนคืน)' %></p>
                     </div>
                     <div class="col-md-6 text-md-end">
@@ -84,7 +84,6 @@
               </ul>
             </div>
             
-            <!-- *** ปุ่มสำหรับ User ยืนยันรับของจากการ "เบิก" *** -->
             <% if (role !== 'admin' && transfer.transfer_type === 'Request' && !isFullyCompleted) { %>
             <div class="card-footer text-center p-3">
               <p class="text-muted mb-2">โปรดตรวจสอบทรัพย์สินให้ครบถ้วนก่อนกดยืนยัน</p>
@@ -94,7 +93,6 @@
             </div>
             <% } %>
 
-            <!-- *** ปุ่มสำหรับ Admin ยืนยันรับของจากการ "คืน" *** -->
             <% if (role === 'admin' && transfer.transfer_type === 'Return' && !isFullyCompleted) { %>
                 <div class="card-footer text-center p-3">
                   <p class="text-muted mb-2">โปรดยืนยันว่าคุณได้รับทรัพย์สินทั้งหมดในรายการนี้คืนแล้ว</p>
@@ -113,47 +111,69 @@
   </div>
 
   <script>
-    // Script สำหรับ User รับของ (โค้ดเดิม)
-    const receiveAllBtn = document.getElementById('receiveAllBtn');
-    if (receiveAllBtn) {
-        // ... (โค้ดส่วนนี้ยังคงเหมือนเดิม)
-    }
-
-    // *** Script ใหม่สำหรับ Admin รับของคืน ***
-    const confirmReturnBtn = document.getElementById('confirmReturnBtn');
-    if (confirmReturnBtn) {
-        confirmReturnBtn.addEventListener('click', function() {
-            const transferNumber = this.dataset.transferNumber;
-
-            Swal.fire({
-                title: 'ยืนยันการรับคืน?',
-                text: "ทรัพย์สินทั้งหมดจะถูกนำกลับเข้าสต็อก",
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#17a2b8',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'ยืนยัน',
-                cancelButtonText: 'ยกเลิก'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    fetch('/api/asset_transfers/confirm_return', { // API ใหม่ที่เราจะสร้าง
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ transfer_number: transferNumber })
-                    })
-                    .then(res => res.json().then(data => ({ ok: res.ok, data })))
-                    .then(({ ok, data }) => {
-                        if (!ok) throw new Error(data.message || 'เกิดข้อผิดพลาด');
-                        Swal.fire('สำเร็จ!', data.message, 'success')
-                            .then(() => window.location.reload());
-                    })
-                    .catch(err => {
-                        Swal.fire('ผิดพลาด!', err.message, 'error');
-                    });
-                }
+    document.addEventListener('DOMContentLoaded', function () {
+        // --- Script สำหรับ User ยืนยันรับของ ---
+        const receiveAllBtn = document.getElementById('receiveAllBtn');
+        if (receiveAllBtn) {
+            receiveAllBtn.addEventListener('click', function () {
+                const transferNumber = this.dataset.transferNumber;
+                Swal.fire({
+                    title: 'ยืนยันการรับของทั้งหมด?',
+                    text: "การดำเนินการนี้ไม่สามารถย้อนกลับได้",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#28a745',
+                    confirmButtonText: 'ยืนยัน',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch('/api/asset_transfers/receive_all', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ transfer_number: transferNumber })
+                        })
+                        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+                        .then(({ ok, data }) => {
+                            if (!ok) throw new Error(data.error || 'เกิดข้อผิดพลาด');
+                            Swal.fire('สำเร็จ!', 'ยืนยันการรับของเรียบร้อยแล้ว', 'success')
+                                .then(() => window.location.reload());
+                        })
+                        .catch(err => Swal.fire('ผิดพลาด!', err.message, 'error'));
+                    }
+                });
             });
-        });
-    }
+        }
+
+        // --- Script สำหรับ Admin ยืนยันรับของคืน ---
+        const confirmReturnBtn = document.getElementById('confirmReturnBtn');
+        if (confirmReturnBtn) {
+            confirmReturnBtn.addEventListener('click', function() {
+                const transferNumber = this.dataset.transferNumber;
+                Swal.fire({
+                    title: 'ยืนยันการรับคืน?',
+                    text: "ทรัพย์สินทั้งหมดจะถูกนำกลับเข้าสต็อก",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#17a2b8',
+                    confirmButtonText: 'ยืนยัน',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        fetch('/api/asset_transfers/confirm_return', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ transfer_number: transferNumber })
+                        })
+                        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+                        .then(({ ok, data }) => {
+                            if (!ok) throw new Error(data.message || 'เกิดข้อผิดพลาด');
+                            Swal.fire('สำเร็จ!', data.message, 'success')
+                                .then(() => window.location.reload());
+                        })
+                        .catch(err => Swal.fire('ผิดพลาด!', err.message, 'error'));
+                    }
+                });
+            });
+        }
+    });
   </script>
 </body>
 </html>
