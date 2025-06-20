@@ -365,53 +365,87 @@ router.post('/api/assets/create_bulk', ifNotLoggedIn, isAdmin, async (req, res) 
 });
 
 
+// ==========================================================
+//     Route สำหรับแสดงหน้า "เลือกทรัพย์สินเพื่อพิมพ์ QR"
+// ==========================================================
+router.get('/print_qr_select', isAdmin, async (req, res) => {
+    try {
+        const { search, category, location } = req.query;
+        let params = [];
+        let whereConditions = [];
 
+        if (search) {
+            whereConditions.push(`(as_name LIKE ? OR as_asset_number LIKE ? OR as_serial_number LIKE ?)`);
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        if (category) {
+            whereConditions.push(`as_category LIKE ?`);
+            params.push(`%${category}%`);
+        }
+        if (location) {
+            if (location.toLowerCase() === 'in_stock') {
+                whereConditions.push(`as_location IS NULL`);
+            } else {
+                whereConditions.push(`as_location LIKE ?`);
+                params.push(`%${location}%`);
+            }
+        }
+        
+        let sqlQuery = "SELECT as_id, as_asset_number, as_name, as_category, as_location FROM assets";
+        if (whereConditions.length > 0) {
+            sqlQuery += ` WHERE ${whereConditions.join(' AND ')}`;
+        }
+        sqlQuery += ` ORDER BY as_id DESC`;
 
-router.get('/print_qr', async (req, res) => {
-  try {
-    const ids = req.query.ids?.split(',') || [];
+        const [assets] = await dbconnection.execute(sqlQuery, params);
 
-    if (ids.length === 0) {
-      return res.status(400).send('กรุณาระบุพารามิเตอร์ ids');
+        res.render('print_qr_select', {
+            assets: assets,
+            user_name: req.session.user_name,
+            role: req.session.role,
+            filters: { search, category, location }
+        });
+    } catch (err) {
+        console.error("Error fetching assets for QR selection:", err);
+        res.status(500).send("Database error");
     }
-
-    // สร้าง placeholder (?, ?, ?, ...)
-    const placeholders = ids.map(() => '?').join(',');
-    const [assets] = await dbconnection.execute(
-      `SELECT * FROM assets WHERE as_asset_number IN (${placeholders})`,
-      ids
-    );
-
-    // สร้าง QR แต่ละรายการ
-    const assetWithQR = await Promise.all(assets.map(async (asset) => {
-      const qrDataURL = await QRCode.toDataURL(asset.as_asset_number);
-      return {
-        ...asset,
-        qrDataURL
-      };
-    }));
-
-    res.render('print_qr_multiple', { assets: assetWithQR });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Server error');
-  }
 });
 
+// ==========================================================
+//     Route สำหรับ "แสดงตัวอย่างก่อนพิมพ์"
+// ==========================================================
+router.post('/print_preview', isAdmin, async (req, res) => {
+    try {
+        const { selected_assets } = req.body;
 
-router.get('/assets/print_qr_select', async (req, res) => {
-  const [assets] = await dbconnection.execute(
-    "SELECT as_asset_number, as_name, as_serial_number FROM assets"
-  );
-  res.render('print_qr_select', { assets, 
-    user_name: req.session.user_name,
-    role: req.session.role 
-  });
+        if (!selected_assets || !Array.isArray(selected_assets) || selected_assets.length === 0) {
+            // อาจจะ redirect กลับไปหน้าเลือกพร้อมข้อความแจ้งเตือน
+            return res.redirect('/assets/print_qr_select');
+        }
+
+        const placeholders = selected_assets.map(() => '?').join(',');
+        const [assets] = await dbconnection.execute(
+            `SELECT as_asset_number, as_name FROM assets WHERE as_asset_number IN (${placeholders})`,
+            selected_assets
+        );
+
+        // สร้าง QR Code สำหรับแต่ละรายการ
+        const assetsWithQR = await Promise.all(assets.map(async (asset) => {
+            const qrDataURL = await QRCode.toDataURL(asset.as_asset_number, {
+                errorCorrectionLevel: 'H',
+                margin: 1,
+                width: 200
+            });
+            return { ...asset, qrDataURL };
+        }));
+        
+        res.render('print_preview', { assets: assetsWithQR });
+
+    } catch (err) {
+        console.error("Error generating QR preview:", err);
+        res.status(500).send("Database error");
+    }
 });
-
-
-
 
 
 // ==========================================================
