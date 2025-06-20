@@ -11,13 +11,12 @@ function ifNotLoggedIn(req, res, next) {
 }
 
 // ==========================================================
-//     Route สำหรับแสดงหน้า "เบิกทรัพย์สิน" (พร้อมระบบกรอง)
+//     Route สำหรับแสดงหน้า "เบิกทรัพย์สิน" (ฉบับอัปเกรด)
 // ==========================================================
 router.get('/asset_requests', ifNotLoggedIn, async (req, res) => {
     try {
         const role = req.session.role;
         const userId = req.session.userID;
-
         const { search, status, startDate, endDate } = req.query;
 
         let params = [];
@@ -45,6 +44,7 @@ router.get('/asset_requests', ifNotLoggedIn, async (req, res) => {
             params.push(endDate);
         }
 
+        // *** จุดที่แก้ไข: เพิ่ม Subquery เพื่อนับจำนวนใบโอนที่ยัง Active อยู่ ***
         let sqlQuery = `
           SELECT 
             ar.req_asset_id,
@@ -52,7 +52,8 @@ router.get('/asset_requests', ifNotLoggedIn, async (req, res) => {
             ar.req_reason,
             ar.req_status,
             ar.req_request_date,
-            (SELECT COUNT(*) FROM asset_request_items WHERE req_asset_id = ar.req_asset_id) AS total_items
+            (SELECT COUNT(*) FROM asset_request_items WHERE req_asset_id = ar.req_asset_id) AS total_items,
+            (SELECT COUNT(*) FROM asset_transfers at WHERE at.req_asset_id = ar.req_asset_id AND at.at_status != 'Cancelled') AS active_transfer_count
           FROM asset_requests ar
         `;
         
@@ -162,6 +163,61 @@ router.post('/create_request', ifNotLoggedIn, async (req, res) => {
     } catch (err) {
         await dbconnection.rollback();
         console.error("Error creating asset request:", err);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
+    }
+});
+
+
+// ==========================================================
+//     Route สำหรับ "ยกเลิกใบเบิก"
+// ==========================================================
+router.post('/api/asset_requests/:req_asset_id/cancel', ifNotLoggedIn, async (req, res) => {
+    const { req_asset_id } = req.params;
+    const { role, userID } = req.session;
+
+    try {
+        // 1. ดึงข้อมูลใบเบิกปัจจุบันเพื่อตรวจสอบ
+        const [requests] = await dbconnection.execute(
+            "SELECT req_status, req_user_id FROM asset_requests WHERE req_asset_id = ?",
+            [req_asset_id]
+        );
+
+        if (requests.length === 0) {
+            return res.status(404).json({ success: false, message: 'ไม่พบใบเบิกนี้' });
+        }
+        const request = requests[0];
+
+        // --- Logic การตรวจสอบเงื่อนไข ---
+        if (role === 'admin') {
+            // Admin สามารถยกเลิกได้ ตราบใดที่ยังไม่มีการสร้างใบโอนที่ Active อยู่
+            const [activeTransfers] = await dbconnection.execute(
+                "SELECT COUNT(*) as count FROM asset_transfers WHERE req_asset_id = ? AND at_status != 'Cancelled'",
+                [req_asset_id]
+            );
+
+            if (activeTransfers[0].count > 0) {
+                return res.status(403).json({ success: false, message: 'ไม่สามารถยกเลิกได้ เนื่องจากมีการสร้างใบโอนสำหรับใบเบิกนี้แล้ว' });
+            }
+        } else { // กรณีเป็น User
+            // User สามารถยกเลิกได้เฉพาะใบเบิกของตัวเอง และต้องมีสถานะเป็น 'Pending' เท่านั้น
+            if (request.req_user_id !== userID) {
+                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ยกเลิกใบเบิกนี้' });
+            }
+            if (request.req_status !== 'Pending') {
+                return res.status(403).json({ success: false, message: `ไม่สามารถยกเลิกได้ เนื่องจากใบเบิกอยู่ในสถานะ '${request.req_status}'` });
+            }
+        }
+
+        // 2. ถ้าผ่านเงื่อนไขทั้งหมด ให้อัปเดตสถานะเป็น 'Cancelled'
+        await dbconnection.execute(
+            "UPDATE asset_requests SET req_status = 'Cancelled' WHERE req_asset_id = ?",
+            [req_asset_id]
+        );
+
+        res.status(200).json({ success: true, message: `ยกเลิกใบเบิก ${req_asset_id} สำเร็จ` });
+
+    } catch (err) {
+        console.error(`Error cancelling request ${req_asset_id}:`, err);
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
     }
 });

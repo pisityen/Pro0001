@@ -110,7 +110,14 @@
                                 <span class="badge bg-success"><i class="fas fa-box-open me-1"></i>In Stock</span>
                             <% } %>
                             </td>
-                            <td><span class="badge bg-<%= asset.as_status === 'active' ? 'primary' : 'danger' %>"><%= asset.as_status %></span></td>
+                            <td>
+                                <span class="badge 
+                                    <% if (asset.as_status === 'active') { %> bg-success
+                                    <% } else if (asset.as_status === 'damaged') { %> bg-warning text-dark
+                                    <% } else { %> bg-danger <% } %>">
+                                    <%= asset.as_status %>
+                                </span>
+                            </td>
                             <td><img src="/api/qrcode/<%= asset.as_asset_number %>" width="60"></td>
                             <td class="text-end">
                             <a href="/assets/assets/edit/<%= asset.as_id %>" class="btn btn-outline-warning btn-sm"><i class="fas fa-pencil-alt"></i></a>

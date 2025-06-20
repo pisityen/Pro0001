@@ -1,173 +1,133 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IT Support</title>
-
-  <!-- CSS -->
-  <link rel="stylesheet" href="/css/bar.css" />
-  <link rel="stylesheet" href="/css/styles.css" />
-
-  <!-- Bootstrap 5.3 -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Support - User Management</title>
+    <link rel="stylesheet" href="/css/bar.css" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
-
 <body>
-  <div class="main-container d-flex">
-
-          <!-- Sidebar -->
-      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
-        <!-- ส่วนเนื้อหาใน Sidebar -->
-        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
-          <h1 class="fs-5 text-uppercase">
-            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
-            <span class="text-white">Management</span>
-          </h1>
+    <div class="main-container d-flex">
+        <!-- Sidebar -->
+        <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+            <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+                <h1 class="fs-5 text-uppercase">
+                    <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+                    <span class="text-white">Management</span>
+                </h1>
+            </div>
+            <ul class="list-unstyled px-2">
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white">Dashboard</a></li>
+                    <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลทรัพย์สิน</a></li>
+                <% } %>
+                <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white">เบิกทรัพย์สิน</a></li>
+                <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white">โอนทรัพย์สิน</a></li>
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a></li>
+                <% } %>
+            </ul>
+            <div class="mt-auto px-2 pb-3 text-center">
+                <div class="text-white mb-2">User : <%= user_name %></div>
+                <div class="text-white mb-2">Role : <%= role %></div>
+                <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
+            </div>
         </div>
-        <ul class="list-unstyled px-2">
-          <li class="mb-2">
-          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
-          </li>
-          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
-          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
-          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
-            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
-        </ul>
-        <div class="mt-auto px-2 pb-3 text-center">
-          <div class="text-white mb-2">
-            User : <%= user_name %>
-          </div>
-          <div class="text-white mb-2">
-            Role : <%= role %>
-          </div>
-          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
-            <i class="fas fa-sign-out-alt me-2"></i> Logout
-          </a>
+    
+        <!-- Main Content -->
+        <div class="content flex-grow-1 p-4 bg-light">
+            <div class="container-fluid">
+                <!-- *** จุดที่แก้ไข: เพิ่มการประกาศตัวแปร filters เพื่อป้องกัน error *** -->
+                <% const filters = locals.filters || {}; %>
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3><i class="fas fa-users-cog me-2"></i>จัดการบัญชีผู้ใช้งาน</h3>
+                    <a href="/account/create" class="btn btn-primary"><i class="fas fa-user-plus me-2"></i>เพิ่มผู้ใช้ใหม่</a>
+                </div>
+
+                <!-- Filter Form -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <form action="/account" method="GET" class="row g-3 align-items-end">
+                            <div class="col-md-5">
+                                <label for="search" class="form-label">ค้นหา</label>
+                                <input type="text" name="search" id="search" class="form-control" value="<%= filters.search || '' %>" placeholder="ชื่อ, นามสกุล, อีเมล...">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="role" class="form-label">ตำแหน่ง</label>
+                                <select name="role" id="role" class="form-select">
+                                    <option value="">ทั้งหมด</option>
+                                    <option value="admin" <%= filters.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                                    <option value="user" <%= filters.role === 'user' ? 'selected' : '' %>>User</option>
+                                </select>
+                            </div>
+                             <div class="col-md-2">
+                                <label for="status" class="form-label">สถานะ</label>
+                                <select name="status" id="status" class="form-select">
+                                    <option value="">ทั้งหมด</option>
+                                    <option value="active" <%= filters.status === 'active' ? 'selected' : '' %>>Active</option>
+                                    <option value="inactive" <%= filters.status === 'inactive' ? 'selected' : '' %>>Inactive</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary me-2"><i class="fas fa-filter"></i> กรอง</button>
+                                <a href="/account" class="btn btn-outline-secondary">ล้างค่า</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ชื่อ - นามสกุล</th>
+                                        <th>Username</th>
+                                        <th>อีเมล</th>
+                                        <th>แผนก</th>
+                                        <th>ตำแหน่ง</th>
+                                        <th>สถานะ</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% if (account && account.length > 0) { %>
+                                        <% account.forEach(user => { %>
+                                            <tr>
+                                                <td><strong><%= user.first_name %> <%= user.last_name %></strong></td>
+                                                <td><%= user.user_name %></td>
+                                                <td><%= user.user_email %></td>
+                                                <td><%= user.user_department || '-' %></td>
+                                                <td><%= user.role %></td>
+                                                <td>
+                                                    <span class="badge bg-<%= user.user_status === 'active' ? 'success' : 'danger' %>">
+                                                        <%= user.user_status %>
+                                                    </span>
+                                                </td>
+                                                <td class="text-end">
+                                                    <a href="/account/edit/<%= user.user_id %>" class="btn btn-outline-warning btn-sm"><i class="fas fa-pencil-alt"></i></a>
+                                                    <form action="/account/delete/<%= user.user_id %>" method="POST" class="d-inline" onsubmit="return confirm('คุณแน่ใจหรือไม่ที่จะลบผู้ใช้คนนี้?');">
+                                                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-trash"></i></button>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        <% }) %>
+                                    <% } else { %>
+                                        <tr><td colspan="7" class="text-center text-muted py-4">ไม่พบข้อมูลผู้ใช้งานที่ตรงกับเงื่อนไข</td></tr>
+                                    <% } %>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-  
-        <!-- //หน้าจอหลัก// -->
-    <div class="content flex-fill">
-
-      <h1>account</h1>
-    <a href="/account/create" class="btn btn-success mb-3">Create User</a>
-    <table class="table table-bordered">
-      <thead>
-        <tr>
-          <th>User ID</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Role</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% if (account && account.length > 0) { %>
-          <% account.forEach(u => { %>
-            <tr>
-              <td><%= u.user_id %></td>
-              <td><%= u.user_name %></td>
-              <td><%= u.user_email %></td>
-              <td><%= u.role %></td>
-              <td>
-                <a href="/account/edit/<%= u.user_id %>" class="btn btn-warning btn-sm">Edit</a>
-                <form action="/account/delete/<%= u.user_id %>" method="POST" style="display:inline;">
-                  <button type="submit" class="btn btn-danger btn-sm" 
-                          onclick="return confirm('Are you sure?');">
-                    Delete
-                  </button>
-                </form>
-              </td>
-            </tr>
-          <% }) %>
-        <% } else { %>
-          <tr>
-            <td colspan="5" class="text-center">No account found</td>
-          </tr>
-        <% } %>
-      </tbody>
-    </table>
-
-      
-      <!-- End ตาราง -->
-
     </div>
-    <!-- End Main Content -->
-
-  </div>
-  <!-- End main-container -->
-
-
-  <script>
-    function approveRequest(req_id, action) {
-      const admin_comment = prompt("กรอกเหตุผล (ถ้ามี):");
-      if (admin_comment === null) return; // ถ้ายกเลิก
-    
-      fetch(`/api/asset_requests/${req_id}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, admin_comment })
-      })
-      .then(res => res.json())
-      .then(data => {
-        alert(data.message || "Updated");
-        // โหลดหน้าใหม่ หรืออัปเดต UI
-        window.location.reload();
-      })
-      .catch(err => console.error(err));
-    }
-
-    <!-- สคริปต์ -->
-    // แสดงฟอร์มโอนทรัพย์สินเมื่อคลิกปุ่ม
-    const transferBtn = document.getElementById('transferBtn');
-    const transferFormContainer = document.getElementById('transferFormContainer');
-
-    if (transferBtn) {
-      transferBtn.addEventListener('click', () => {
-        transferFormContainer.style.display = 'block';
-      });
-    }
-
-    // เมื่อ submit ฟอร์มโอน
-    document.getElementById('transferForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-
-      const req_asset_id = document.getElementById('req_asset_id').value.trim();
-      const as_asset_number = document.getElementById('as_asset_number').value.trim();
-      const reason = document.getElementById('reason').value.trim();
-
-      // เรียก API /api/asset_transfers
-      fetch('/api/asset_transfers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ req_asset_id, as_asset_number, reason })
-      })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error('Error transferring asset');
-        }
-        return res.json();
-      })
-      .then(data => {
-        alert(data.message || 'Transfer completed');
-        // ซ่อนฟอร์มโอนอีกครั้ง
-        transferFormContainer.style.display = 'none';
-        // รีเซ็ตฟอร์มหรือรีโหลดหน้าตามต้องการ
-      })
-      .catch(err => {
-        console.error(err);
-        alert('Error: ' + err.message);
-      });
-    });
-
-    </script>
-    
-  <!-- jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-  <!-- Script.js (ถ้ามี) -->
-  <script src="/script.js"></script>
 </body>
 </html>

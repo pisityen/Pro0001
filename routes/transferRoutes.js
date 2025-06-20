@@ -20,35 +20,41 @@ function isAdmin(req, res, next) {
 
 
 
-router.get('/asset_transfers/:req_asset_id', async (req, res) => {
+// ==========================================================
+//     Route สำหรับแสดงหน้า "ทำใบโอน" (ฉบับอัปเกรด)
+// ==========================================================
+router.get('/asset_transfers/:req_asset_id', ifNotLoggedIn, isAdmin, async (req, res) => {
   try {
     const { req_asset_id } = req.params;
 
-    // 1. ดึงข้อมูลใบเบิกหลักเพื่อแสดงรายละเอียด
-    const [requestRows] = await dbconnection.execute(
-      "SELECT req_asset_id, req_user_name, req_reason, req_status FROM asset_requests WHERE req_asset_id = ?",
+    // *** ส่วนที่เพิ่มเข้ามา: ตรวจสอบว่ามีใบโอนที่ยังไม่เสร็จสิ้นอยู่หรือไม่ ***
+    const [existingTransfers] = await dbconnection.execute(
+      `SELECT transfer_number, at_status FROM asset_transfers WHERE req_asset_id = ? AND at_status != 'Cancelled'`,
       [req_asset_id]
     );
 
-    if (requestRows.length === 0) {
-      return res.status(404).send("ไม่พบใบเบิก");
+    if (existingTransfers.length > 0) {
+        // หากมีใบโอนค้างอยู่ ให้แสดงหน้า Error พร้อมข้อความแจ้งเตือน
+        return res.status(403).render('error_page', {
+            title: 'ไม่สามารถดำเนินการได้',
+            message: `ไม่สามารถสร้างใบโอนใหม่ได้ เนื่องจากใบเบิก ${req_asset_id} มีใบโอนที่ยังไม่เสร็จสิ้นอยู่แล้ว (เลขที่: ${existingTransfers[0].transfer_number}, สถานะ: ${existingTransfers[0].at_status})`
+        });
     }
 
-    // 2. *** จุดสำคัญ: ดึงข้อมูลเฉพาะรายการที่ "อนุมัติแล้ว" และมีจำนวนที่ต้องโอน > 0 ***
+    // ถ้าไม่พบใบโอนค้างอยู่ ให้ทำงานต่อไปตามปกติ
+    const [requestRows] = await dbconnection.execute("SELECT * FROM asset_requests WHERE req_asset_id = ?", [req_asset_id]);
+    if (requestRows.length === 0) return res.status(404).send("ไม่พบใบเบิก");
+
     const [approvedItems] = await dbconnection.execute(
-      `SELECT item_id, item_name, item_quantity_approved 
-       FROM asset_request_items 
-       WHERE req_asset_id = ? AND item_status IN ('Approved', 'Partially Approved') AND item_quantity_approved > 0`,
+      `SELECT item_id, item_name, item_quantity_approved FROM asset_request_items WHERE req_asset_id = ? AND item_status IN ('Approved', 'Partially Approved') AND item_quantity_approved > 0`,
       [req_asset_id]
     );
 
-    // 3. ส่งข้อมูลทั้งหมดไปที่ EJS
-    res.render('asset_transfers', { // ตรวจสอบว่าชื่อไฟล์ EJS ของคุณคือ 'asset_transfers.ejs'
+    res.render('asset_transfers', {
       request: requestRows[0],
-      items: approvedItems, // ส่งรายการที่อนุมัติแล้วไปในชื่อ 'items'
+      items: approvedItems,
       user_name: req.session.user_name,
       role: req.session.role,
-      // ส่ง req_asset_id ไปด้วยอีกครั้งเพื่อให้ EJS ใช้งานง่าย
       req_asset_id: req_asset_id
     });
 
@@ -58,6 +64,38 @@ router.get('/asset_transfers/:req_asset_id', async (req, res) => {
   }
 });
 
+
+
+// ==========================================================
+//     Route สำหรับ "Admin" ยกเลิกใบโอน
+// ==========================================================
+router.post('/api/asset_transfers/:transfer_number/cancel', ifNotLoggedIn, isAdmin, async (req, res) => {
+    const { transfer_number } = req.params;
+
+    if (!transfer_number) {
+        return res.status(400).json({ success: false, message: 'ไม่พบหมายเลขใบโอน' });
+    }
+
+    try {
+        // อัปเดตสถานะของทุกรายการในใบโอนนี้ให้เป็น 'Cancelled'
+        // โดยมีเงื่อนไขว่าจะต้องเป็นสถานะ 'Pending' เท่านั้น เพื่อป้องกันการยกเลิกใบที่เสร็จสิ้นไปแล้ว
+        const [result] = await dbconnection.execute(
+            `UPDATE asset_transfers SET at_status = 'Cancelled' WHERE transfer_number = ? AND at_status = 'Pending'`,
+            [transfer_number]
+        );
+
+        // ตรวจสอบว่ามีการอัปเดตแถวข้อมูลหรือไม่
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'ไม่พบใบโอนที่อยู่ในสถานะ Pending หรือใบโอนนี้อาจถูกจัดการไปแล้ว' });
+        }
+
+        res.status(200).json({ success: true, message: `ยกเลิกใบโอน ${transfer_number} สำเร็จ` });
+
+    } catch (err) {
+        console.error("Error cancelling transfer:", err);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในเซิร์ฟเวอร์' });
+    }
+});
 
 
 router.post('/api/asset_transfers/multiple', async (req, res) => {
@@ -95,17 +133,19 @@ router.post('/api/asset_transfers/multiple', async (req, res) => {
     }
 
     const placeholders = allScannedAssets.map(() => '?').join(',');
-
     const [assetsFromDB] = await dbconnection.execute(
-        `SELECT as_asset_number, as_location FROM assets WHERE as_asset_number IN (${placeholders})`,
+        `SELECT as_asset_number, as_location, as_status FROM assets WHERE as_asset_number IN (${placeholders})`,
         allScannedAssets
     );
 
-    const unavailableAssets = assetsFromDB.filter(asset => asset.as_location !== null);
+    const unavailableAssets = assetsFromDB.filter(asset => asset.as_location !== null || asset.as_status !== 'active');
 
     if (unavailableAssets.length > 0) {
-        const unavailableList = unavailableAssets.map(a => `${a.as_asset_number} (ปัจจุบันอยู่ที่: ${a.as_location})`).join(', ');
-        return res.status(400).json({ error: `ทรัพย์สินบางรายการถูกใช้งานแล้วและไม่สามารถโอนได้: ${unavailableList}` });
+        const unavailableList = unavailableAssets.map(a => {
+            const reason = a.as_status !== 'active' ? `สถานะ: ${a.as_status}` : `อยู่ที่: ${a.as_location}`;
+            return `${a.as_asset_number} (${reason})`;
+        }).join(', ');
+        return res.status(400).json({ error: `ทรัพย์สินบางรายการไม่พร้อมใช้งาน: ${unavailableList}` });
     }
 
     const [inUseAssets] = await dbconnection.execute(

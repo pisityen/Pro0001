@@ -1,105 +1,117 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IT Support</title>
-
-  <!-- CSS -->
-  <link rel="stylesheet" href="/css/bar.css" />
-  <link rel="stylesheet" href="/css/styles.css" />
-
-  <!-- Bootstrap 5.3 -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Support - Edit User</title>
+    <link rel="stylesheet" href="/css/bar.css" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-
 <body>
-  <div class="main-container d-flex">
-
-      <!-- Sidebar -->
-      <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
-        <!-- ส่วนเนื้อหาใน Sidebar -->
-        <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
-          <h1 class="fs-5 text-uppercase">
-            <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
-            <span class="text-white">Management</span>
-          </h1>
+    <div class="main-container d-flex">
+        <!-- Sidebar (โค้ดเดิม) -->
+        <div class="sidebar bg-dark text-white vh-100 d-flex flex-column" id="side_nav">
+            <div class="header-box px-3 pt-3 pb-4 d-flex justify-content-between align-items-center">
+                <h1 class="fs-5 text-uppercase">
+                    <span class="bg-white text-dark rounded shadow px-2 me-2">IT</span>
+                    <span class="text-white">Management</span>
+                </h1>
+            </div>
+            <ul class="list-unstyled px-2">
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white">Dashboard</a></li>
+                    <li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white">ข้อมูลทรัพย์สิน</a></li>
+                <% } %>
+                <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white">เบิกทรัพย์สิน</a></li>
+                <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white">โอนทรัพย์สิน</a></li>
+                <% if (role === 'admin') { %>
+                    <li class="mb-2"><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a></li>
+                <% } %>
+            </ul>
+            <div class="mt-auto px-2 pb-3 text-center">
+                <div class="text-white mb-2">User : <%= user_name %></div>
+                <div class="text-white mb-2">Role : <%= role %></div>
+                <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
+            </div>
         </div>
-        <ul class="list-unstyled px-2">
-          <li class="mb-2">
-          <% if (role === 'admin') { %><a href="/dashboard" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">Dashboard</a><% } %>
-          </li>
-          <% if (role === 'admin') { %><li class="mb-2"><a href="/asset_management" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลทรัพย์สิน</a></li><% } %>
-          <li class="mb-2"><a href="/asset_requests" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">เบิกทรัพย์สิน</a></li>
-          <li class="mb-2"><a href="/all_transfers" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">โอนทรัพย์สิน</a></li>
-            <% if (role === 'admin') { %><a href="/account" class="text-decoration-none px-3 py-3 d-block rounded text-white active-link">ข้อมูลผู้ใช้งาน</a><% } %></li>
-        </ul>
-        <div class="mt-auto px-2 pb-3 text-center">
-          <div class="text-white mb-2">
-            User : <%= user_name %>
-          </div>
-          <div class="text-white mb-2">
-            Role : <%= role %>
-          </div>
-          <a href="/logout" class="btn btn-danger text-decoration-none px-3 py-2 w-100">
-            <i class="fas fa-sign-out-alt me-2"></i> Logout
-          </a>
-        </div>
-      </div>
-  
-        <!-- //หน้าจอหลัก// -->
-    <div class="content flex-fill">
-
-      <h1>Edit User</h1>
-      <form action="/account/edit/<%= user.user_id %>" method="POST">
-        <div class="mb-3">
-          <label for="first_name" class="form-label">Firstname</label>
-          <input type="text" class="form-control" id="first_name" name="first_name" value="<%= user.first_name %>" required>
-          <label for="Last_name" class="form-label">Lastname</label>
-          <input type="text" class="form-control" id="Last_name" name="last_name" value="<%= user.last_name %>" required>
-        </div>
-        <div class="mb-3">
-          <label for="user_department" class="form-label">Department</label>
-          <input type="text" class="form-control" id="user_department" name="user_department" value="<%= user.user_department %>" required>
-        </div>
-        <div class="mb-3">
-          <label for="user_name" class="form-label">Username</label>
-          <input type="text" class="form-control" id="user_name" name="user_name" value="<%= user.user_name %>" required>
-        </div>
-        <div class="mb-3">
-          <label for="user_email" class="form-label">Email</label>
-          <input type="email" class="form-control" id="user_email" name="user_email" value="<%= user.user_email %>" required>
-        </div>
-        <div class="mb-3">
-          <label for="user_password" class="form-label">New Password</label>
-          <input type="password" class="form-control" id="user_password" name="user_password" value="">
-        </div>
-        <div class="mb-3">
-          <label for="role" class="form-label">Role</label>
-          <select class="form-select" id="role" name="role">
-            <option value="user" <%= user.role === 'user' ? 'selected' : '' %>>User</option>
-            <option value="admin" <%= user.role === 'admin' ? 'selected' : '' %>>Admin</option>
-          </select>
-        </div>
-        <button type="submit" class="btn btn-primary">Update</button>
-        <a href="/account" class="btn btn-secondary">Cancel</a>
-      </form>
-
-      
-      <!-- End ตาราง -->
-
-    </div>
-    <!-- End Main Content -->
-
-  </div>
-  <!-- End main-container -->
-
     
-  <!-- jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-  <!-- Script.js (ถ้ามี) -->
-  <script src="/script.js"></script>
+        <!-- Main Content -->
+        <div class="content flex-grow-1 p-4 bg-light">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-lg-8">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3><i class="fas fa-user-edit me-2"></i> แก้ไขข้อมูลผู้ใช้งาน: <%= user.user_name %></h3>
+                            <a href="/account" class="btn btn-secondary"><i class="fas fa-chevron-left me-2"></i>กลับ</a>
+                        </div>
+                        <div class="card shadow-sm">
+                            <div class="card-body p-4">
+                                <form action="/account/edit/<%= user.user_id %>" method="POST">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="first_name" class="form-label">ชื่อจริง</label>
+                                            <input type="text" class="form-control" id="first_name" name="first_name" value="<%= user.first_name %>" required>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="last_name" class="form-label">นามสกุล</label>
+                                            <input type="text" class="form-control" id="last_name" name="last_name" value="<%= user.last_name %>" required>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="user_department" class="form-label">แผนก</label>
+                                        <input type="text" class="form-control" id="user_department" name="user_department" value="<%= user.user_department || '' %>">
+                                    </div>
+
+                                    <hr>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="user_name" class="form-label">Username</label>
+                                            <input type="text" class="form-control" id="user_name" name="user_name" value="<%= user.user_name %>" required>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="user_email" class="form-label">Email</label>
+                                            <input type="email" class="form-control" id="user_email" name="user_email" value="<%= user.user_email %>" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="user_password" class="form-label">รหัสผ่านใหม่</label>
+                                        <input type="password" class="form-control" id="user_password" name="user_password" placeholder="ปล่อยว่างไว้หากไม่ต้องการเปลี่ยนแปลง">
+                                        <div class="form-text">กรอกรหัสผ่านใหม่เพื่อทำการเปลี่ยนแปลง</div>
+                                    </div>
+                                    
+                                    <hr>
+
+                                    <div class="row">
+                                         <div class="col-md-6 mb-3">
+                                            <label for="role" class="form-label">ตำแหน่ง (Role)</label>
+                                            <select class="form-select" id="role" name="role">
+                                                <option value="user" <%= user.role === 'user' ? 'selected' : '' %>>User</option>
+                                                <option value="admin" <%= user.role === 'admin' ? 'selected' : '' %>>Admin</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="user_status" class="form-label">สถานะ (Status)</label>
+                                            <select class="form-select" id="user_status" name="user_status">
+                                                <option value="active" <%= user.user_status === 'active' ? 'selected' : '' %>>Active</option>
+                                                <option value="inactive" <%= user.user_status === 'inactive' ? 'selected' : '' %>>Inactive</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-grid gap-2 mt-3">
+                                        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save me-2"></i>บันทึกการเปลี่ยนแปลง</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

@@ -47,6 +47,11 @@
           
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h3><i class="fas fa-box-open me-2"></i> รายละเอียดใบโอน: <%= transfer.transfer_number %></h3>
+            <% if (role === 'admin' && !isFullyCompleted && transfer.at_status !== 'Cancelled') { %>
+                    <button class="btn btn-danger" onclick="cancelTransfer('<%= transfer.transfer_number %>')">
+                        <i class="fas fa-times-circle me-2"></i>ยกเลิกใบโอนนี้
+                    </button>
+                <% } %>
             <a href="/all_transfers" class="btn btn-secondary"><i class="fas fa-chevron-left me-2"></i>กลับไปหน้ารายการ</a>
           </div>
 
@@ -84,7 +89,7 @@
               </ul>
             </div>
             
-            <% if (role !== 'admin' && transfer.transfer_type === 'Request' && !isFullyCompleted) { %>
+            <% if (role !== 'admin' && transfer.transfer_type === 'Request' && transfer.at_status === 'Pending' && !isFullyCompleted) { %>
             <div class="card-footer text-center p-3">
               <p class="text-muted mb-2">โปรดตรวจสอบทรัพย์สินให้ครบถ้วนก่อนกดยืนยัน</p>
               <button id="receiveAllBtn" class="btn btn-success btn-lg" data-transfer-number="<%= transfer.transfer_number %>">
@@ -93,7 +98,7 @@
             </div>
             <% } %>
 
-            <% if (role === 'admin' && transfer.transfer_type === 'Return' && !isFullyCompleted) { %>
+            <% if (role === 'admin' && transfer.transfer_type === 'Return' && transfer.at_status === 'Pending' && !isFullyCompleted) { %>
                 <div class="card-footer text-center p-3">
                   <p class="text-muted mb-2">โปรดยืนยันว่าคุณได้รับทรัพย์สินทั้งหมดในรายการนี้คืนแล้ว</p>
                   <button id="confirmReturnBtn" class="btn btn-info btn-lg" data-transfer-number="<%= transfer.transfer_number %>">
@@ -174,6 +179,35 @@
             });
         }
     });
+
+    function cancelTransfer(transferNumber) {
+        Swal.fire({
+            title: 'ยืนยันการยกเลิก?',
+            text: `คุณต้องการยกเลิกใบโอนเลขที่ ${transferNumber} ใช่หรือไม่?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'ยืนยัน, ยกเลิกเลย!',
+            cancelButtonText: 'ปิด'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/api/asset_transfers/${transferNumber}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                })
+                .then(res => res.json().then(data => ({ ok: res.ok, data })))
+                .then(({ ok, data }) => {
+                    if (!ok) throw new Error(data.message || 'เกิดข้อผิดพลาด');
+                    Swal.fire('สำเร็จ!', data.message, 'success')
+                        .then(() => window.location.reload());
+                })
+                .catch(err => {
+                    Swal.fire('ผิดพลาด!', err.message, 'error');
+                });
+            }
+        });
+    }
   </script>
 </body>
 </html>

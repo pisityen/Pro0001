@@ -419,13 +419,14 @@ router.post('/print_preview', isAdmin, async (req, res) => {
         const { selected_assets } = req.body;
 
         if (!selected_assets || !Array.isArray(selected_assets) || selected_assets.length === 0) {
-            // อาจจะ redirect กลับไปหน้าเลือกพร้อมข้อความแจ้งเตือน
             return res.redirect('/assets/print_qr_select');
         }
 
         const placeholders = selected_assets.map(() => '?').join(',');
+        
+        // *** จุดที่แก้ไข: เพิ่ม as_serial_number เข้าไปในคำสั่ง SELECT ***
         const [assets] = await dbconnection.execute(
-            `SELECT as_asset_number, as_name FROM assets WHERE as_asset_number IN (${placeholders})`,
+            `SELECT as_asset_number, as_name, as_serial_number FROM assets WHERE as_asset_number IN (${placeholders})`,
             selected_assets
         );
 
@@ -589,20 +590,35 @@ router.get('/api/assets/:as_number', async (req, res) => {
 });
 
 
-// --- API สำหรับสร้าง QR Code (GET) ---
-router.get('/api/qrcode/:as_number', async (req, res) => {
+// --- API สำหรับตรวจสอบข้อมูลทรัพย์สินตอนสแกน (ฉบับอัปเกรด) ---
+router.get('/api/assets/:as_number', async (req, res) => {
   try {
-    const asNumber = req.params.as_number;
-    const qr = await QRCode.toDataURL(asNumber, { errorCorrectionLevel: 'H' });
-    const img = Buffer.from(qr.split(',')[1], 'base64');
-    res.writeHead(200, {
-      'Content-Type': 'image/png',
-      'Content-Length': img.length
-    });
-    res.end(img);
+    const { as_number } = req.params;
+    const [rows] = await dbconnection.execute(
+      "SELECT * FROM assets WHERE as_asset_number = ?",
+      [as_number]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: `ไม่พบหมายเลขทรัพย์สิน ${as_number}` });
+    }
+
+    const asset = rows[0];
+
+    // --- จุดที่แก้ไข: เพิ่มการตรวจสอบสถานะและ Location ---
+    if (asset.as_status !== 'active') {
+        return res.status(400).json({ error: `ทรัพย์สินนี้อยู่ในสถานะ '${asset.as_status}' และไม่พร้อมใช้งาน` });
+    }
+    if (asset.as_location !== null) {
+        return res.status(400).json({ error: `ทรัพย์สินนี้ถูกใช้งานโดย '${asset.as_location}' อยู่แล้ว` });
+    }
+    // --- จบส่วนที่แก้ไข ---
+
+    res.json(asset);
+
   } catch (err) {
-    console.error('QR Code Error:', err);
-    res.status(500).send('Error generating QR');
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
