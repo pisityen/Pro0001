@@ -48,6 +48,12 @@
                         </div>
                         <div class="card shadow-sm">
                             <div class="card-body p-4">
+                              <!-- เพิ่มส่วนนี้เข้าไป -->
+                              <% if (locals.errorMessage) { %>
+                                <div class="alert alert-danger" role="alert">
+                                  <%- errorMessage %>
+                                </div>
+                              <% } %>
                                 <form action="/account/edit/<%= user.user_id %>" method="POST">
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
